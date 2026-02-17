@@ -3,10 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebRTC Voice Chat</title>
-    <!-- PeerJS Library - Handles WebRTC signaling for us -->
+    <title>Lightweight chat and text</title>
+    
+    <!-- PeerJS Library - Handles WebRTC signaling for us (replaces Node.js server) -->
     <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+    
     <style>
+        /* ================================================================
+           GLOBAL STYLES
+           These are the base styles applied to all elements
+           ================================================================ */
+        
         * {
             margin: 0;
             padding: 0;
@@ -17,39 +24,48 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ================================================================
+           HOME SCREEN STYLES
+           The initial screen where users enter username and create/join rooms
+           ================================================================ */
+        
+        #home-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
             padding: 20px;
         }
 
-        /* Main container for the setup screen */
-        #setup-screen {
+        .home-container {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
             max-width: 500px;
-            margin: 50px auto;
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            width: 100%;
         }
 
-        /* Main container for the room screen */
-        #room-screen {
-            display: none;
-            max-width: 1200px;
-            margin: 20px auto;
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-        }
-
-        h1, h2 {
+        h1 {
             color: #333;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             text-align: center;
+            font-size: 28px;
         }
 
-        /* Form input styling */
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
         .input-group {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
 
         label {
@@ -57,645 +73,1197 @@
             margin-bottom: 8px;
             color: #555;
             font-weight: 600;
+            font-size: 14px;
         }
 
-        input, select {
+        input[type="text"] {
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             border: 2px solid #ddd;
             border-radius: 8px;
-            font-size: 14px;
+            font-size: 15px;
             transition: border-color 0.3s;
         }
 
-        input:focus, select:focus {
+        input[type="text"]:focus {
             outline: none;
             border-color: #667eea;
         }
 
-        /* Button styling */
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
         button {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            padding: 16px;
             border: none;
             border-radius: 8px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: all 0.3s;
         }
 
-        button:hover {
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
         }
 
-        button:active {
-            transform: translateY(0);
+        .btn-secondary {
+            background: #28a745;
+            color: white;
         }
 
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
+        .btn-secondary:hover {
+            background: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
         }
 
-        /* Room layout - split between users and chat */
-        .room-container {
+        /* ================================================================
+           ROOM SETUP SCREEN STYLES
+           Shown after creating a room, displays the room ID and allows naming
+           ================================================================ */
+        
+        #room-setup-screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .setup-container {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+
+        /* Room ID display box - shows the 10-digit room code */
+        .room-id-display {
+            background: #f0f8ff;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        .room-id-label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .room-id-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #667eea;
+            letter-spacing: 2px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .copy-instruction {
+            font-size: 12px;
+            color: #888;
+            margin-top: 8px;
+        }
+
+        /* ================================================================
+           JOIN ROOM MODAL
+           Popup that appears when user clicks "Join Room" button
+           ================================================================ */
+        
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-header {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .modal-buttons {
             display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 20px;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
             margin-top: 20px;
         }
 
-        /* Users panel */
-        .users-panel {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
+        .btn-cancel {
+            background: #dc3545;
+            color: white;
         }
 
-        /* Individual user card */
-        .user-card {
-            background: white;
-            padding: 15px;
-            margin-bottom: 10px;
-            border-radius: 8px;
+        .btn-cancel:hover {
+            background: #c82333;
+        }
+
+        /* ================================================================
+           ROOM SCREEN STYLES (MAIN APP)
+           The main application interface with channels, chat, and users
+           ================================================================ */
+        
+        #room-screen {
+            display: none;
+            height: 100vh;
+            background: #2c2f33;
+        }
+
+        /* 3-column grid layout: channels | chat | users */
+        .room-layout {
+            display: grid;
+            grid-template-columns: 200px 1fr 250px;
+            grid-template-rows: 50px 1fr 70px;
+            height: 100vh;
+            gap: 0;
+        }
+
+        /* ================================================================
+           TOP HEADER BAR
+           Shows the room name at the top of the screen
+           ================================================================ */
+        .room-header {
+            grid-column: 1 / -1;
+            background: #23272a;
+            padding: 0 20px;
             display: flex;
             align-items: center;
-            gap: 15px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
+            border-bottom: 2px solid #1a1c1f;
         }
 
-        .user-card.talking {
-            border: 3px solid #4CAF50;
-            transform: scale(1.02);
-        }
-
-        /* Audio visualizer canvas */
-        .audio-visualizer {
-            width: 60px;
-            height: 40px;
-            background: #f0f0f0;
-            border-radius: 5px;
-        }
-
-        .user-info {
-            flex: 1;
-        }
-
-        .user-name {
+        .room-title {
+            color: white;
+            font-size: 18px;
             font-weight: 600;
-            color: #333;
-            margin-bottom: 4px;
         }
 
-        .user-status {
-            font-size: 12px;
-            color: #888;
+        /* ================================================================
+           LEFT SIDEBAR - VOICE CHANNELS
+           List of voice channels that users can switch between
+           ================================================================ */
+        .channels-panel {
+            grid-row: 2;
+            background: #2f3136;
+            border-right: 1px solid #202225;
+            overflow-y: auto;
         }
 
-        /* Chat panel */
+        .channels-header {
+            padding: 15px;
+            background: #27292d;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            border-bottom: 1px solid #202225;
+        }
+
+        .channel-list {
+            padding: 10px;
+        }
+
+        /* Individual channel item styling */
+        .channel-item {
+            padding: 10px 12px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: #8e9297;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .channel-item:hover {
+            background: #34373c;
+            color: #dcddde;
+        }
+
+        /* Active channel gets highlighted */
+        .channel-item.active {
+            background: #5865f2;
+            color: white;
+        }
+
+        .channel-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Delete button (×) appears on hover for host */
+        .channel-delete {
+            color: #ed4245;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 16px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+
+        .channel-item:hover .channel-delete {
+            opacity: 1;
+        }
+
+        .channel-delete:hover {
+            background: #ed4245;
+            color: white;
+        }
+
+        /* Button to add new channels */
+        .add-channel-btn {
+            width: 100%;
+            padding: 12px;
+            background: #3ba55d;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 20px;
+            font-weight: bold;
+            transition: background 0.2s;
+            margin-top: 10px;
+        }
+
+        .add-channel-btn:hover {
+            background: #2d7d46;
+        }
+
+        /* ================================================================
+           CENTER PANEL - CHAT AREA
+           Where messages are displayed and typed
+           ================================================================ */
         .chat-panel {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
+            grid-row: 2;
             display: flex;
             flex-direction: column;
-            max-height: 600px;
+            background: #36393f;
         }
 
+        /* Scrollable area for chat messages */
         .chat-messages {
             flex: 1;
             overflow-y: auto;
-            margin-bottom: 15px;
-            padding: 10px;
-            background: white;
-            border-radius: 8px;
-            min-height: 400px;
+            padding: 20px;
         }
 
-        /* Individual chat message */
+        /* Individual chat message bubble */
         .chat-message {
-            margin-bottom: 12px;
+            margin-bottom: 15px;
             padding: 10px;
-            background: #e9ecef;
+            background: #40444b;
             border-radius: 8px;
             word-wrap: break-word;
         }
 
-        .chat-message .sender {
+        /* Message header with username and timestamp */
+        .message-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 5px;
+        }
+
+        .message-username {
+            color: #5865f2;
             font-weight: 600;
-            color: #667eea;
-            margin-bottom: 4px;
+            font-size: 14px;
         }
 
-        .chat-message .text {
-            color: #333;
+        /* Timestamp showing hh:mm:ss AM/PM */
+        .message-timestamp {
+            color: #72767d;
+            font-size: 11px;
         }
 
-        /* Links and images in chat */
-        .chat-message a {
-            color: #667eea;
+        .message-text {
+            color: #dcddde;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+
+        /* Links in messages are clickable and blue */
+        .message-text a {
+            color: #00aff4;
             text-decoration: underline;
         }
 
-        .chat-message img {
-            max-width: 200px;
+        /* Embedded images/GIFs in messages */
+        .message-text img {
+            max-width: 300px;
             border-radius: 5px;
-            margin-top: 5px;
+            margin-top: 8px;
+            display: block;
         }
 
-        /* Chat input area */
+        /* Input area at bottom of chat */
         .chat-input-area {
+            padding: 15px 20px;
+            background: #40444b;
+            border-top: 1px solid #2f3136;
+        }
+
+        .chat-input {
+            width: 100%;
+            padding: 12px 15px;
+            background: #36393f;
+            border: 1px solid #202225;
+            border-radius: 8px;
+            color: #dcddde;
+            font-size: 14px;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: #5865f2;
+        }
+
+        /* ================================================================
+           RIGHT SIDEBAR - USERS LIST
+           Shows all members in the current voice channel
+           ================================================================ */
+        .users-panel {
+            grid-row: 2;
+            background: #2f3136;
+            border-left: 1px solid #202225;
+            overflow-y: auto;
+        }
+
+        .users-header {
+            padding: 15px;
+            background: #27292d;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            border-bottom: 1px solid #202225;
+        }
+
+        .user-list {
+            padding: 10px;
+        }
+
+        /* Individual user item in the list */
+        .user-item {
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            cursor: pointer;
             display: flex;
-            gap: 10px;
-        }
-
-        .chat-input-area input {
-            flex: 1;
-        }
-
-        .chat-input-area button {
-            width: auto;
-            padding: 12px 20px;
-        }
-
-        /* Controls panel */
-        .controls-panel {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            display: flex;
-            gap: 15px;
             align-items: center;
-            flex-wrap: wrap;
+            gap: 8px;
+            color: #dcddde;
+            font-size: 14px;
+            transition: background 0.2s;
+            position: relative;
         }
 
-        /* Push to talk button - special styling */
-        #push-to-talk-btn {
-            width: auto;
-            padding: 15px 30px;
-            background: #dc3545;
-            font-size: 18px;
+        .user-item:hover {
+            background: #34373c;
         }
 
-        #push-to-talk-btn.active {
-            background: #28a745;
+        /* Mute status icon (🔊 or 🔇) */
+        .user-status-icon {
+            font-size: 12px;
         }
 
-        /* Noise suppression slider */
-        .noise-control {
+        .user-name {
             flex: 1;
+        }
+
+        /* ================================================================
+           USER CONTEXT MENU
+           Right-click menu for muting/adjusting individual user volumes
+           ================================================================ */
+        .user-context-menu {
+            display: none;
+            position: fixed;
+            background: #18191c;
+            border: 1px solid #0f1012;
+            border-radius: 8px;
+            padding: 8px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4);
+            z-index: 1000;
             min-width: 200px;
         }
 
-        .noise-control input[type="range"] {
-            width: 100%;
+        .user-context-menu.active {
+            display: block;
         }
 
-        .noise-level {
-            text-align: center;
-            margin-top: 5px;
+        .context-menu-item {
+            padding: 10px 12px;
+            color: #dcddde;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .context-menu-item:hover {
+            background: #4752c4;
+        }
+
+        /* Volume slider in the context menu */
+        .volume-control {
+            padding: 12px;
+        }
+
+        .volume-label {
+            color: #b9bbbe;
             font-size: 12px;
-            color: #666;
+            margin-bottom: 8px;
         }
 
-        /* PTT toggle switch */
-        .ptt-toggle {
+        .volume-slider {
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background: #4f545c;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #5865f2;
+            cursor: pointer;
+        }
+
+        .volume-value {
+            color: #b9bbbe;
+            font-size: 11px;
+            text-align: center;
+            margin-top: 4px;
+        }
+
+        /* ================================================================
+           BOTTOM CONTROLS BAR
+           Contains Leave, Settings, and Mic buttons
+           ================================================================ */
+        .controls-bar {
+            grid-column: 1 / -1;
+            background: #23272a;
+            border-top: 2px solid #1a1c1f;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+
+        .controls-left, .controls-right {
+            display: flex;
+            gap: 15px;
+        }
+
+        .control-btn {
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .control-btn.btn-settings {
+            background: #4f545c;
+            color: white;
+        }
+
+        .control-btn.btn-settings:hover {
+            background: #686d73;
+        }
+
+        .control-btn.btn-mic {
+            background: #5865f2;
+            color: white;
+        }
+
+        .control-btn.btn-mic:hover {
+            background: #4752c4;
+        }
+
+        .control-btn.btn-leave {
+            background: #ed4245;
+            color: white;
+        }
+
+        .control-btn.btn-leave:hover {
+            background: #c23235;
+        }
+
+        /* ================================================================
+           SETTINGS MODAL
+           Popup for configuring audio, PTT, and noise suppression
+           ================================================================ */
+        .settings-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .settings-modal.active {
+            display: flex;
+        }
+
+        .settings-content {
+            background: #36393f;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            max-width: 500px;
+            width: 90%;
+            color: #dcddde;
+        }
+
+        .settings-header {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 25px;
+            color: white;
+        }
+
+        .setting-item {
+            margin-bottom: 25px;
+        }
+
+        .setting-label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            color: #b9bbbe;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            background: #2f3136;
+            border: 1px solid #202225;
+            border-radius: 8px;
+            color: #dcddde;
+            font-size: 14px;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #5865f2;
+        }
+
+        .checkbox-container {
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
-        .toggle-switch {
-            position: relative;
-            width: 50px;
-            height: 24px;
-            background: #ccc;
-            border-radius: 12px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        .toggle-switch.active {
-            background: #667eea;
-        }
-
-        .toggle-slider {
-            position: absolute;
-            top: 2px;
-            left: 2px;
+        input[type="checkbox"] {
             width: 20px;
             height: 20px;
-            background: white;
-            border-radius: 50%;
-            transition: transform 0.3s;
+            cursor: pointer;
         }
 
-        .toggle-switch.active .toggle-slider {
-            transform: translateX(26px);
-        }
-
-        /* Leave room button */
-        #leave-room-btn {
-            width: auto;
-            padding: 12px 20px;
-            background: #dc3545;
-        }
-
-        /* Friends list styling */
-        .friend-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 12px;
-            background: white;
-            margin-bottom: 5px;
-            border-radius: 5px;
-            border-left: 3px solid #ddd;
-        }
-
-        .friend-item.online {
-            border-left-color: #28a745;
-        }
-
-        .friend-item.offline {
-            border-left-color: #dc3545;
-        }
-
-        .friend-info {
-            flex: 1;
-        }
-
-        .friend-name {
-            font-weight: 600;
-            color: #333;
-        }
-
-        .friend-status {
-            font-size: 11px;
-            color: #666;
-        }
-
-        .friend-status.online {
-            color: #28a745;
-        }
-
-        .friend-status.offline {
-            color: #dc3545;
-        }
-
-        .friend-actions {
-            display: flex;
-            gap: 5px;
-        }
-
-        .friend-actions button {
-            width: auto;
-            padding: 5px 10px;
-            font-size: 12px;
-        }
-
-        .remove-friend-btn {
-            background: #dc3545 !important;
-        }
-
-        /* Status messages */
-        .status-message {
-            text-align: center;
-            padding: 10px;
-            background: #d1ecf1;
+        /* Push-to-talk key capture box */
+        .ptt-keybox {
+            width: 100%;
+            padding: 12px;
+            background: #2f3136;
+            border: 2px solid #5865f2;
             border-radius: 8px;
-            color: #0c5460;
-            margin-bottom: 15px;
+            color: #dcddde;
+            text-align: center;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
         }
 
-        /* Responsive design for mobile */
-        @media (max-width: 768px) {
-            .room-container {
-                grid-template-columns: 1fr;
-            }
-            
-            .controls-panel {
-                flex-direction: column;
-            }
-            
-            #push-to-talk-btn {
-                width: 100%;
-            }
+        .ptt-keybox:hover {
+            background: #34373c;
+        }
+
+        .settings-footer {
+            margin-top: 30px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        /* ================================================================
+           SCROLLBAR STYLING
+           Custom scrollbar for dark theme
+           ================================================================ */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #2e3136;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #202225;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #18191c;
         }
     </style>
 </head>
 <body>
-    <!-- SETUP SCREEN: Where users enter their info and join a room -->
-    <div id="setup-screen">
-        <h1>🎙️ Voice Chat</h1>
-        
-        <div class="input-group">
-            <label for="username">Your Name</label>
-            <input type="text" id="username" placeholder="Enter your name" />
-        </div>
-
-        <!-- Friend ID Section -->
-        <div class="input-group" style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-            <label style="margin-bottom: 10px;">Your Friend ID</label>
-            <div style="display: flex; gap: 10px; align-items: center;">
-                <input type="text" id="my-friend-id" readonly style="flex: 1; background: #e8f4f8; cursor: pointer;" placeholder="Will generate after first join" />
-                <button type="button" id="copy-friend-id-btn" style="width: auto; padding: 10px 20px; font-size: 14px;">Copy</button>
+    <!-- ================================================================
+         HOME SCREEN
+         Initial screen where users enter their username and choose to
+         create a new room or join an existing one
+         ================================================================ -->
+    
+    <div id="home-screen">
+        <div class="home-container">
+            <h1>Levie's lightweight chat and text app</h1>
+            <p class="subtitle">Connect with friends through voice</p>
+            
+            <!-- Username input - required field -->
+            <div class="input-group">
+                <label for="username">Username <span style="color: red;">*</span></label>
+                <input type="text" id="username" placeholder="Enter your username">
             </div>
-            <small style="color: #666; margin-top: 5px; display: block;">Share this ID with friends so they can add you!</small>
-        </div>
-
-        <div class="input-group">
-            <label for="add-friend-input">Add Friend by ID</label>
-            <div style="display: flex; gap: 10px;">
-                <input type="text" id="add-friend-input" placeholder="Paste friend's ID here" style="flex: 1;" />
-                <button type="button" id="add-friend-btn" style="width: auto; padding: 10px 20px;">Add</button>
+            
+            <!-- Create Room and Join Room buttons -->
+            <div class="button-group">
+                <button class="btn-primary" id="create-room-btn">Create Room</button>
+                <button class="btn-secondary" id="join-room-btn">Join Room</button>
             </div>
         </div>
-
-        <!-- Friends List -->
-        <div class="input-group" id="friends-section" style="display: none;">
-            <label>Friends</label>
-            <div id="friends-list" style="background: #f8f9fa; padding: 10px; border-radius: 8px; max-height: 150px; overflow-y: auto;">
-                <!-- Friends will be added here -->
-            </div>
-        </div>
-
-        <div class="input-group">
-            <label for="audio-input">Microphone</label>
-            <select id="audio-input">
-                <option value="">Loading devices...</option>
-            </select>
-        </div>
-
-        <div class="input-group">
-            <label for="room-name">Room Name</label>
-            <input type="text" id="room-name" placeholder="Enter room name to join" />
-        </div>
-
-        <button id="join-btn">Join Room</button>
     </div>
 
-    <!-- ROOM SCREEN: The actual voice chat interface -->
-    <div id="room-screen">
-        <h2>Room: <span id="current-room-name"></span></h2>
-        
-        <div class="status-message" id="status-message">
-            Connecting to room...
-        </div>
-
-        <!-- Controls: Push to talk, noise suppression, leave -->
-        <div class="controls-panel">
-            <button id="push-to-talk-btn">Hold to Talk (Space)</button>
+    <!-- ================================================================
+         ROOM SETUP SCREEN
+         Appears after creating a room - shows the generated 10-digit
+         room ID and allows the host to name the room
+         ================================================================ -->
+    
+    <div id="room-setup-screen">
+        <div class="setup-container">
+            <h1>Room Created!</h1>
+            <p class="subtitle">Share this Room ID with others</p>
             
-            <div class="ptt-toggle">
-                <label>Push-to-Talk Mode:</label>
-                <div class="toggle-switch active" id="ptt-toggle">
-                    <div class="toggle-slider"></div>
-                </div>
+            <!-- Display the 10-digit room ID (clickable to copy) -->
+            <div class="room-id-display">
+                <div class="room-id-label">ROOM ID</div>
+                <div class="room-id-value" id="display-room-id">0000000000</div>
+                <div class="copy-instruction">Click to copy</div>
             </div>
-
-            <div class="noise-control">
-                <label>Noise Gate Threshold: <span id="noise-value">-50 dB</span></label>
-                <input type="range" id="noise-slider" min="-100" max="-20" value="-50" />
-                <div class="noise-level">Lower = More sensitive | Higher = Less sensitive</div>
+            
+            <!-- Room name input - required -->
+            <div class="input-group">
+                <label for="room-name-input">Room Name <span style="color: red;">*</span></label>
+                <input type="text" id="room-name-input" placeholder="Enter room name">
             </div>
-
-            <button id="leave-room-btn">Leave Room</button>
+            
+            <button class="btn-primary" id="enter-room-btn" style="width: 100%;">Enter Room</button>
         </div>
+    </div>
 
-        <!-- Main room layout -->
-        <div class="room-container">
-            <!-- Left side: Users and their audio visualizers -->
-            <div class="users-panel">
-                <h3>Participants</h3>
-                <div id="users-list">
-                    <!-- User cards will be added here dynamically -->
-                </div>
+    <!-- ================================================================
+         JOIN ROOM MODAL
+         Popup that appears when clicking "Join Room" button
+         User enters the 10-digit room ID here
+         ================================================================ -->
+    
+    <div class="modal-overlay" id="join-modal">
+        <div class="modal-content">
+            <div class="modal-header">Join Room</div>
+            <div class="input-group">
+                <label for="join-room-id">Room ID <span style="color: red;">*</span></label>
+                <input type="text" id="join-room-id" placeholder="Enter 10-digit room ID" maxlength="10">
             </div>
+            <div class="modal-buttons">
+                <button class="btn-cancel" id="cancel-join-btn">Cancel</button>
+                <button class="btn-primary" id="confirm-join-btn">Join</button>
+            </div>
+        </div>
+    </div>
 
-            <!-- Right side: Chat -->
+    <!-- ================================================================
+         ROOM SCREEN (MAIN APPLICATION)
+         The main voice chat interface with 3 panels:
+         - Left: Voice channels
+         - Center: Chat messages
+         - Right: Users list
+         ================================================================ -->
+    
+    <div id="room-screen">
+        <div class="room-layout">
+            <!-- Top header bar showing room name -->
+            <div class="room-header">
+                <div class="room-title" id="room-title-display">Room Name</div>
+            </div>
+            
+            <!-- Left sidebar - Voice channels list -->
+            <div class="channels-panel">
+                <div class="channels-header">VOICE CHANNELS</div>
+                <div class="channel-list" id="channel-list">
+                    <!-- Channels will be dynamically added here by JavaScript -->
+                </div>
+                <!-- Button to create new channel (host only) -->
+                <button class="add-channel-btn" id="add-channel-btn">+</button>
+            </div>
+            
+            <!-- Center panel - Chat messages and input -->
             <div class="chat-panel">
-                <h3>Chat</h3>
                 <div class="chat-messages" id="chat-messages">
-                    <!-- Chat messages appear here -->
+                    <!-- Chat messages appear here dynamically -->
                 </div>
                 <div class="chat-input-area">
-                    <input type="text" id="chat-input" placeholder="Type a message..." />
-                    <button id="send-chat-btn">Send</button>
+                    <input type="text" class="chat-input" id="chat-input" placeholder="Type a message...">
                 </div>
+            </div>
+            
+            <!-- Right sidebar - Users in current channel -->
+            <div class="users-panel">
+                <div class="users-header">MEMBERS</div>
+                <div class="user-list" id="user-list">
+                    <!-- Users will be added here dynamically -->
+                </div>
+            </div>
+            
+            <!-- Bottom control bar with Settings, Mic, and Leave buttons -->
+            <div class="controls-bar">
+                <div class="controls-left">
+                    <button class="control-btn btn-settings" id="settings-btn">Settings</button>
+                    <button class="control-btn btn-mic" id="mic-btn">Mic</button>
+                </div>
+                <div class="controls-right">
+                    <button class="control-btn btn-leave" id="leave-btn">Leave</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================================================
+         USER CONTEXT MENU
+         Right-click menu that appears when clicking on a user
+         Allows muting and adjusting volume for that specific user
+         ================================================================ -->
+    <div class="user-context-menu" id="user-context-menu">
+        <div class="context-menu-item" id="toggle-mute-user">Mute/Unmute</div>
+        <div class="volume-control">
+            <div class="volume-label">User Volume</div>
+            <!-- Slider to adjust individual user's volume (0-200%) -->
+            <input type="range" class="volume-slider" id="user-volume-slider" min="0" max="200" value="100">
+            <div class="volume-value" id="user-volume-value">100%</div>
+        </div>
+    </div>
+
+    <!-- ================================================================
+         SETTINGS MODAL
+         Popup for configuring all audio and input settings
+         ================================================================ -->
+    <div class="settings-modal" id="settings-modal">
+        <div class="settings-content">
+            <div class="settings-header">Settings</div>
+            
+            <!-- Microphone device selection dropdown -->
+            <div class="setting-item">
+                <label class="setting-label">Microphone Input</label>
+                <select id="mic-input-select">
+                    <option>Loading...</option>
+                </select>
+            </div>
+            
+            <!-- Input volume slider (0-100%) -->
+            <div class="setting-item">
+                <label class="setting-label">Input Volume</label>
+                <input type="range" class="volume-slider" id="input-volume-slider" min="0" max="100" value="100">
+                <div class="volume-value" id="input-volume-value">100%</div>
+            </div>
+            
+            <!-- Output volume slider (0-200%) for all incoming audio -->
+            <div class="setting-item">
+                <label class="setting-label">Output Volume</label>
+                <input type="range" class="volume-slider" id="output-volume-slider" min="0" max="200" value="100">
+                <div class="volume-value" id="output-volume-value">100%</div>
+            </div>
+            
+            <!-- Noise suppression toggle -->
+            <div class="setting-item">
+                <div class="checkbox-container">
+                    <input type="checkbox" id="noise-suppression-checkbox">
+                    <label class="setting-label" style="margin: 0;">Enable Noise Suppression</label>
+                </div>
+            </div>
+            
+            <!-- Push-to-talk configuration -->
+            <div class="setting-item">
+                <div class="checkbox-container">
+                    <input type="checkbox" id="ptt-checkbox">
+                    <label class="setting-label" style="margin: 0;">Enable Push-to-Talk</label>
+                </div>
+                <!-- Hidden section that appears when PTT is enabled -->
+                <div id="ptt-key-section" style="display: none;">
+                    <div class="ptt-keybox" id="ptt-keybox">Click here to capture Push to talk input key</div>
+                </div>
+            </div>
+            
+            <div class="settings-footer">
+                <button class="control-btn btn-primary" id="close-settings-btn">Close</button>
             </div>
         </div>
     </div>
 
     <script>
-        // =================================================================
+        // ====================================================================
         // GLOBAL VARIABLES AND STATE
-        // =================================================================
+        // These variables store the application's state throughout runtime
+        // ====================================================================
         
-        let peer; // Our PeerJS connection object
-        let myPeerId; // Our unique ID assigned by PeerJS
-        let myFriendId; // Our permanent friend ID (derived from peer ID or stored)
-        let currentRoom; // The room name we're in
-        let connections = {}; // Object to store all peer connections
-        let localStream; // Our microphone stream
-        let audioContext; // Web Audio API context for audio processing
-        let analyser; // Audio analyser for visualizations
-        let noiseGateThreshold = -50; // dB threshold for noise gate
-        let isPushToTalkMode = true; // Whether PTT is enabled
-        let isTalking = false; // Whether we're currently transmitting
-        let userSettings = {}; // Stores username, devices, etc.
-        let friendsList = []; // Array of friend objects {id, name, peerId, online}
-        let onlineCheckInterval; // Interval for checking friend online status
-
-        // =================================================================
-        // INITIALIZATION: Load saved settings and setup devices
-        // =================================================================
+        let peer; // PeerJS peer object - our connection to the PeerJS signaling server
+        let myPeerId; // Our unique peer ID assigned by PeerJS
+        let localStream; // Our microphone audio stream
+        let currentUsername = ''; // Username entered by user
+        let currentRoomId = ''; // The 10-digit room ID we're in
+        let currentRoomName = ''; // The room name
+        let currentChannelId = ''; // Current voice channel ID
+        let currentChannelName = ''; // Current voice channel name
+        let isHost = false; // Whether we're the room host
         
-        // Load saved settings from localStorage when page loads
+        // Room data stored in localStorage (shared across all users on same browser)
+        let roomData = {}; // Structure: { channels: {}, users: [], host: peerId }
+        
+        // WebRTC connections
+        let peerConnections = {}; // Stores RTCPeerConnection objects for each peer
+        let dataConnections = {}; // Stores PeerJS data connections for chat
+        let remoteAudioElements = {}; // Stores <audio> elements for remote users
+        
+        // Settings (stored in localStorage)
+        let selectedMicDeviceId = null;
+        let inputVolume = 100;
+        let outputVolume = 100;
+        let noiseSuppressionEnabled = false;
+        let pushToTalkEnabled = false;
+        let pushToTalkKey = null; // Stores the PTT key/button binding
+        let isPushToTalkActive = false;
+        let userVolumes = {}; // Individual volume settings per user
+        
+        // Context menu state
+        let contextMenuTargetUserId = null;
+        
+        // Channel users tracking
+        let usersInChannel = {}; // Map of peerId -> username in current channel
+        
+        // ====================================================================
+        // INITIALIZATION
+        // Code that runs when the page first loads
+        // ====================================================================
+        
         window.addEventListener('DOMContentLoaded', () => {
-            loadUserSettings();
-            enumerateDevices();
+            // Load saved username from browser's localStorage
+            const savedUsername = localStorage.getItem('username');
+            if (savedUsername) {
+                document.getElementById('username').value = savedUsername;
+            }
+            
+            // Load all saved settings (mic, volumes, PTT, etc.)
+            loadSettings();
         });
-
-        // Load user settings from browser storage
-        function loadUserSettings() {
-            const saved = localStorage.getItem('voiceChatSettings');
-            if (saved) {
-                userSettings = JSON.parse(saved);
-                document.getElementById('username').value = userSettings.username || '';
-                myFriendId = userSettings.friendId || null;
-                // Device IDs will be set after enumerating devices
-            }
-            
-            // Load friends list
-            const savedFriends = localStorage.getItem('voiceChatFriends');
-            if (savedFriends) {
-                friendsList = JSON.parse(savedFriends);
-                displayFriendsList();
-            }
-            
-            // Display friend ID if we have one
-            if (myFriendId) {
-                document.getElementById('my-friend-id').value = myFriendId;
-            }
-        }
-
-        // Save user settings to browser storage
-        function saveUserSettings() {
-            userSettings = {
-                username: document.getElementById('username').value,
-                audioDeviceId: document.getElementById('audio-input').value,
-                friendId: myFriendId
-            };
-            localStorage.setItem('voiceChatSettings', JSON.stringify(userSettings));
-        }
         
-        // Save friends list to localStorage
-        function saveFriendsList() {
-            localStorage.setItem('voiceChatFriends', JSON.stringify(friendsList));
-        }
-
-        // Get list of available microphones
-        async function enumerateDevices() {
-            try {
-                // Request permission first
-                await navigator.mediaDevices.getUserMedia({ audio: true });
-                
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const audioSelect = document.getElementById('audio-input');
-                
-                // Clear existing options
-                audioSelect.innerHTML = '';
-                
-                // Populate dropdown with available audio devices
-                devices.forEach(device => {
-                    if (device.kind === 'audioinput') {
-                        const option = document.createElement('option');
-                        option.value = device.deviceId;
-                        option.text = device.label || `Microphone ${audioSelect.length + 1}`;
-                        audioSelect.appendChild(option);
-                    }
-                });
-                
-                // Restore saved device selection
-                if (userSettings.audioDeviceId) {
-                    audioSelect.value = userSettings.audioDeviceId;
-                }
-            } catch (error) {
-                console.error('Error enumerating devices:', error);
-                alert('Could not access microphone. Please grant permission.');
-            }
-        }
-
-        // =================================================================
-        // JOINING A ROOM
-        // =================================================================
+        // ====================================================================
+        // HOME SCREEN - CREATE ROOM BUTTON
+        // When user clicks "Create Room", generate a 10-digit room ID and
+        // initialize PeerJS connection
+        // ====================================================================
         
-        document.getElementById('join-btn').addEventListener('click', joinRoom);
-
-        async function joinRoom() {
+        document.getElementById('create-room-btn').addEventListener('click', async () => {
             const username = document.getElementById('username').value.trim();
-            const roomName = document.getElementById('room-name').value.trim();
-            const audioDeviceId = document.getElementById('audio-input').value;
             
-            // Validate inputs
+            // Validate username is not empty
             if (!username) {
-                alert('Please enter your name');
-                return;
-            }
-            if (!roomName) {
-                alert('Please enter a room name');
-                return;
-            }
-            if (!audioDeviceId) {
-                alert('Please select a microphone');
+                alert('Please enter a username');
                 return;
             }
             
-            // Generate Friend ID if we don't have one
-            if (!myFriendId) {
-                myFriendId = generateFriendId();
-                document.getElementById('my-friend-id').value = myFriendId;
-            }
+            currentUsername = username;
+            localStorage.setItem('username', username); // Save for next time
             
-            // Save settings
-            saveUserSettings();
-            currentRoom = roomName;
+            // Generate unique 10-digit room ID
+            currentRoomId = generateRoomId();
             
-            // Get microphone stream
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({
-                    audio: { deviceId: audioDeviceId }
-                });
-                
-                // Setup audio processing
-                setupAudioProcessing();
-                
-                // Initialize PeerJS connection
-                initializePeer(username, roomName);
-                
-                // Start friends online status checking
-                startFriendsOnlineCheck();
-                
-                // Switch to room screen
-                document.getElementById('setup-screen').style.display = 'none';
-                document.getElementById('room-screen').style.display = 'block';
-                document.getElementById('current-room-name').textContent = roomName;
-                
-                // Add ourselves to the user list
-                addUserToList(myPeerId, username, true);
-                
-            } catch (error) {
-                console.error('Error accessing microphone:', error);
-                alert('Could not access microphone. Please check permissions.');
-            }
-        }
-        
-        // Generate a unique Friend ID
-        function generateFriendId() {
-            // Create a unique ID based on timestamp and random string
-            const timestamp = Date.now().toString(36);
-            const randomStr = Math.random().toString(36).substring(2, 9);
-            return `${timestamp}-${randomStr}`;
-        }
-
-        // =================================================================
-        // PEERJS INITIALIZATION AND CONNECTION
-        // =================================================================
-        
-        function initializePeer(username, roomName) {
-            // Create a new PeerJS instance
-            // This connects to PeerJS's free signaling server
-            peer = new Peer({
+            // Initialize PeerJS connection with a custom peer ID
+            // The peer ID format is: roomId-randomString
+            const peerId = `${currentRoomId}-${generateRandomString()}`;
+            peer = new Peer(peerId, {
                 config: {
                     iceServers: [
-                        { urls: 'stun:stun.l.google.com:19302' }, // Google's STUN server
-                        { urls: 'stun:global.stun.twilio.com:3478' } // Twilio's STUN server
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
                     ]
                 }
             });
             
-            // When we successfully connect and get an ID
+            // Wait for PeerJS connection to open
             peer.on('open', (id) => {
                 myPeerId = id;
                 console.log('My peer ID:', myPeerId);
                 
-                // Announce ourselves to the room
-                // In a real app, you'd have a room server managing this
-                // For now, we'll use a simple localStorage-based room system
-                announceToRoom(roomName, username);
+                // We are the host since we created the room
+                isHost = true;
                 
-                updateStatusMessage('Connected! Waiting for others to join...');
+                // Create default room structure
+                const defaultChannelId = generateChannelId();
+                roomData = {
+                    roomName: 'Unnamed Room', // Will be set later
+                    host: myPeerId,
+                    channels: {
+                        [defaultChannelId]: {
+                            name: 'Voice Channel 1',
+                            users: [{ peerId: myPeerId, username: currentUsername }]
+                        }
+                    }
+                };
+                
+                currentChannelId = defaultChannelId;
+                currentChannelName = 'Voice Channel 1';
+                
+                // Save room data to localStorage
+                saveRoomData();
+                
+                // Setup PeerJS event listeners
+                setupPeerListeners();
+                
+                // Show room setup screen
+                document.getElementById('home-screen').style.display = 'none';
+                document.getElementById('room-setup-screen').style.display = 'flex';
+                document.getElementById('display-room-id').textContent = currentRoomId;
             });
             
-            // When someone calls us
+            // Handle PeerJS errors
+            peer.on('error', (error) => {
+                console.error('Peer error:', error);
+                alert('Connection error: ' + error.type);
+            });
+        });
+        
+        // ====================================================================
+        // HOME SCREEN - JOIN ROOM BUTTON
+        // Shows the modal for entering a room ID
+        // ====================================================================
+        
+        document.getElementById('join-room-btn').addEventListener('click', () => {
+            const username = document.getElementById('username').value.trim();
+            
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
+            
+            // Show the join room modal
+            document.getElementById('join-modal').classList.add('active');
+        });
+        
+        // Cancel button in join modal
+        document.getElementById('cancel-join-btn').addEventListener('click', () => {
+            document.getElementById('join-modal').classList.remove('active');
+            document.getElementById('join-room-id').value = '';
+        });
+        
+        // Confirm button in join modal - actually join the room
+        document.getElementById('confirm-join-btn').addEventListener('click', async () => {
+            const username = document.getElementById('username').value.trim();
+            const roomId = document.getElementById('join-room-id').value.trim();
+            
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
+            
+            // Validate room ID is 10 digits
+            if (!roomId || roomId.length !== 10 || !/^\d+$/.test(roomId)) {
+                alert('Please enter a valid 10-digit Room ID');
+                return;
+            }
+            
+            currentUsername = username;
+            currentRoomId = roomId;
+            localStorage.setItem('username', username);
+            
+            // Load existing room data from localStorage
+            const savedRoomData = localStorage.getItem(`room_${roomId}`);
+            if (!savedRoomData) {
+                alert('Room not found. Make sure the Room ID is correct.');
+                return;
+            }
+            
+            roomData = JSON.parse(savedRoomData);
+            currentRoomName = roomData.roomName;
+            
+            // Find the first channel to join
+            const channelIds = Object.keys(roomData.channels);
+            if (channelIds.length === 0) {
+                alert('Room has no channels');
+                return;
+            }
+            
+            currentChannelId = channelIds[0];
+            currentChannelName = roomData.channels[currentChannelId].name;
+            
+            // Initialize PeerJS with unique ID
+            const peerId = `${roomId}-${generateRandomString()}`;
+            peer = new Peer(peerId, {
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                }
+            });
+            
+            peer.on('open', async (id) => {
+                myPeerId = id;
+                console.log('My peer ID:', myPeerId);
+                
+                // Add ourselves to the channel
+                roomData.channels[currentChannelId].users.push({
+                    peerId: myPeerId,
+                    username: currentUsername
+                });
+                
+                saveRoomData();
+                
+                // Setup PeerJS listeners
+                setupPeerListeners();
+                
+                // Get microphone access
+                try {
+                    await getMicrophoneAccess();
+                    
+                    // Connect to all existing users in the channel
+                    const existingUsers = roomData.channels[currentChannelId].users;
+                    for (const user of existingUsers) {
+                        if (user.peerId !== myPeerId) {
+                            await connectToPeer(user.peerId, user.username);
+                        }
+                    }
+                    
+                    // Go to room screen
+                    document.getElementById('join-modal').classList.remove('active');
+                    document.getElementById('home-screen').style.display = 'none';
+                    document.getElementById('room-screen').style.display = 'block';
+                    document.getElementById('room-title-display').textContent = currentRoomName;
+                    
+                    updateChannelsList();
+                    updateUsersList();
+                    addSystemMessage('Joined ' + currentChannelName);
+                    
+                } catch (error) {
+                    console.error('Error accessing microphone:', error);
+                    alert('Could not access microphone. Please grant permission.');
+                }
+            });
+            
+            peer.on('error', (error) => {
+                console.error('Peer error:', error);
+                alert('Connection error: ' + error.type);
+            });
+        });
+        
+        // ====================================================================
+        // ROOM SETUP SCREEN - ENTER ROOM BUTTON
+        // After creating a room and naming it, enter the actual room interface
+        // ====================================================================
+        
+        // Make room ID clickable to copy
+        document.getElementById('display-room-id').addEventListener('click', () => {
+            const roomId = document.getElementById('display-room-id').textContent;
+            navigator.clipboard.writeText(roomId).then(() => {
+                alert('Room ID copied to clipboard!');
+            });
+        });
+        
+        // Enter room button - validate room name and get mic access
+        document.getElementById('enter-room-btn').addEventListener('click', async () => {
+            const roomName = document.getElementById('room-name-input').value.trim();
+            
+            if (!roomName) {
+                alert('Please enter a room name');
+                return;
+            }
+            
+            currentRoomName = roomName;
+            roomData.roomName = roomName;
+            saveRoomData();
+            
+            // Get microphone access
+            try {
+                await getMicrophoneAccess();
+                
+                // Transition to main room screen
+                document.getElementById('room-setup-screen').style.display = 'none';
+                document.getElementById('room-screen').style.display = 'block';
+                document.getElementById('room-title-display').textContent = roomName;
+                
+                updateChannelsList();
+                updateUsersList();
+                addSystemMessage('Welcome to ' + currentChannelName);
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                alert('Could not access microphone. Please grant permission and try again.');
+            }
+        });
+        
+        // ====================================================================
+        // PEERJS EVENT LISTENERS
+        // Setup listeners for incoming connections and data
+        // ====================================================================
+        
+        function setupPeerListeners() {
+            // When someone calls us with audio
             peer.on('call', (call) => {
                 console.log('Incoming call from:', call.peer);
                 
@@ -709,81 +1277,66 @@
                 });
                 
                 // Store the call connection
-                connections[call.peer] = call;
+                peerConnections[call.peer] = call;
             });
             
-            // When someone sends us a data connection
+            // When someone sends us a data connection (for chat)
             peer.on('connection', (conn) => {
+                console.log('Incoming data connection from:', conn.peer);
                 setupDataConnection(conn);
             });
-            
-            // Error handling
-            peer.on('error', (error) => {
-                console.error('Peer error:', error);
-                updateStatusMessage('Connection error: ' + error.type);
-            });
         }
-
-        // Announce ourselves to others in the room
-        function announceToRoom(roomName, username) {
-            // Get current room members from localStorage
-            const roomKey = `room_${roomName}`;
-            const roomData = JSON.parse(localStorage.getItem(roomKey) || '{}');
-            const roomMembers = roomData.members || [];
+        
+        // ====================================================================
+        // CONNECTING TO OTHER PEERS
+        // Establish WebRTC connections for audio and data (chat)
+        // ====================================================================
+        
+        async function connectToPeer(remotePeerId, remoteUsername) {
+            console.log('Connecting to peer:', remotePeerId);
             
-            // Connect to each existing member
-            roomMembers.forEach(member => {
-                if (member.peerId !== myPeerId) {
-                    connectToPeer(member.peerId, member.username);
-                }
-            });
-            
-            // Add ourselves to the room
-            roomMembers.push({ peerId: myPeerId, username: username });
-            roomData.members = roomMembers;
-            localStorage.setItem(roomKey, JSON.stringify(roomData));
-            
-            // Clean up when window closes
-            window.addEventListener('beforeunload', () => {
-                leaveRoom();
-            });
-        }
-
-        // Connect to a specific peer
-        function connectToPeer(peerId, username) {
-            console.log('Connecting to peer:', peerId);
-            
-            // Setup data connection for chat
-            const dataConn = peer.connect(peerId);
+            // Setup data connection for chat messages
+            const dataConn = peer.connect(remotePeerId);
             setupDataConnection(dataConn);
             
-            // Setup audio connection
-            const call = peer.call(peerId, localStream);
+            // Setup audio call
+            const call = peer.call(remotePeerId, localStream);
             
             call.on('stream', (remoteStream) => {
-                console.log('Received stream from:', peerId);
-                handleRemoteStream(peerId, remoteStream);
+                console.log('Received stream from:', remotePeerId);
+                handleRemoteStream(remotePeerId, remoteStream);
             });
             
             // Store connection
-            connections[peerId] = call;
+            peerConnections[remotePeerId] = call;
             
-            // Add user to list
-            addUserToList(peerId, username, false);
+            // Add user to our local tracking
+            usersInChannel[remotePeerId] = remoteUsername;
+            updateUsersList();
         }
-
-        // =================================================================
-        // DATA CONNECTION FOR CHAT
-        // =================================================================
+        
+        // ====================================================================
+        // DATA CONNECTION SETUP (FOR CHAT)
+        // PeerJS data connections allow us to send chat messages and signals
+        // ====================================================================
         
         function setupDataConnection(conn) {
+            dataConnections[conn.peer] = conn;
+            
             conn.on('open', () => {
                 console.log('Data connection opened with:', conn.peer);
                 
                 // Send our username
                 conn.send({
                     type: 'username',
-                    username: userSettings.username
+                    username: currentUsername
+                });
+                
+                // Notify about new user
+                broadcastData({
+                    type: 'user-joined',
+                    peerId: myPeerId,
+                    username: currentUsername
                 });
             });
             
@@ -791,657 +1344,965 @@
                 handleDataMessage(conn.peer, data);
             });
             
-            // Store data connection
-            if (!connections[conn.peer]) {
-                connections[conn.peer] = {};
-            }
-            connections[conn.peer].dataConn = conn;
+            conn.on('close', () => {
+                console.log('Data connection closed with:', conn.peer);
+                delete dataConnections[conn.peer];
+            });
         }
-
-        // Handle incoming data messages
-        function handleDataMessage(peerId, data) {
-            if (data.type === 'chat') {
-                addChatMessage(data.username, data.message);
-            } else if (data.type === 'username') {
-                updateUserName(peerId, data.username);
-            } else if (data.type === 'talking') {
-                updateUserTalkingStatus(peerId, data.isTalking);
-            }
-        }
-
-        // =================================================================
-        // AUDIO PROCESSING AND VISUALIZATION
-        // =================================================================
         
-        function setupAudioProcessing() {
-            // Create Web Audio API context
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
-            // Create analyser for visualizations
-            analyser = audioContext.createAnalyser();
-            analyser.fftSize = 256;
-            
-            // Connect our microphone to analyser
-            const source = audioContext.createMediaStreamSource(localStream);
-            source.connect(analyser);
-            
-            // Start audio level monitoring
-            monitorAudioLevels();
-        }
-
-        // Monitor our own audio levels for noise gate
-        function monitorAudioLevels() {
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            
-            function check() {
-                analyser.getByteFrequencyData(dataArray);
-                
-                // Calculate average volume
-                const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-                const dB = 20 * Math.log10(average / 255);
-                
-                // Check if we should be transmitting based on noise gate
-                if (!isPushToTalkMode) {
-                    const shouldTalk = dB > noiseGateThreshold;
-                    if (shouldTalk !== isTalking) {
-                        setTalking(shouldTalk);
+        // ====================================================================
+        // HANDLING INCOMING DATA MESSAGES
+        // Process different types of messages: chat, username, user-joined, etc.
+        // ====================================================================
+        
+        function handleDataMessage(fromPeerId, data) {
+            switch (data.type) {
+                case 'chat':
+                    // Display chat message
+                    addChatMessage(data.username, data.message, data.timestamp, false);
+                    break;
+                    
+                case 'username':
+                    // Store username for this peer
+                    usersInChannel[fromPeerId] = data.username;
+                    updateUsersList();
+                    break;
+                    
+                case 'user-joined':
+                    // Another user joined the channel
+                    usersInChannel[data.peerId] = data.username;
+                    updateUsersList();
+                    addSystemMessage(`${data.username} joined the channel`);
+                    
+                    // If we're already connected, establish connection
+                    if (data.peerId !== myPeerId && !peerConnections[data.peerId]) {
+                        connectToPeer(data.peerId, data.username);
                     }
+                    break;
+                    
+                case 'user-left':
+                    // User left the channel
+                    delete usersInChannel[data.peerId];
+                    updateUsersList();
+                    addSystemMessage(`${data.username} left the channel`);
+                    
+                    // Close connections
+                    if (peerConnections[data.peerId]) {
+                        peerConnections[data.peerId].close();
+                        delete peerConnections[data.peerId];
+                    }
+                    if (dataConnections[data.peerId]) {
+                        dataConnections[data.peerId].close();
+                        delete dataConnections[data.peerId];
+                    }
+                    if (remoteAudioElements[data.peerId]) {
+                        remoteAudioElements[data.peerId].remove();
+                        delete remoteAudioElements[data.peerId];
+                    }
+                    break;
+                    
+                case 'channel-created':
+                    // New channel was created
+                    roomData.channels[data.channelId] = {
+                        name: data.channelName,
+                        users: []
+                    };
+                    saveRoomData();
+                    updateChannelsList();
+                    addSystemMessage(`Channel "${data.channelName}" created`);
+                    break;
+                    
+                case 'channel-deleted':
+                    // Channel was deleted
+                    if (currentChannelId === data.channelId) {
+                        // We were in this channel, move to first available
+                        const otherChannels = Object.keys(roomData.channels).filter(id => id !== data.channelId);
+                        if (otherChannels.length > 0) {
+                            switchChannel(otherChannels[0]);
+                        }
+                    }
+                    delete roomData.channels[data.channelId];
+                    saveRoomData();
+                    updateChannelsList();
+                    break;
+                    
+                case 'host-transfer':
+                    // Host role transferred
+                    isHost = (data.newHost === myPeerId);
+                    roomData.host = data.newHost;
+                    saveRoomData();
+                    updateChannelsList();
+                    addSystemMessage(`${data.username} is now the host`);
+                    break;
+            }
+        }
+        
+        // ====================================================================
+        // MICROPHONE ACCESS
+        // Request permission and access to user's microphone
+        // ====================================================================
+        
+        async function getMicrophoneAccess() {
+            const constraints = {
+                audio: {
+                    deviceId: selectedMicDeviceId ? { exact: selectedMicDeviceId } : undefined,
+                    echoCancellation: true,
+                    noiseSuppression: noiseSuppressionEnabled,
+                    autoGainControl: true
                 }
-                
-                // Update our visualizer
-                updateLocalVisualizer(dataArray);
-                
-                requestAnimationFrame(check);
+            };
+            
+            localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // If PTT is enabled, mute by default
+            if (pushToTalkEnabled) {
+                localStream.getAudioTracks().forEach(track => {
+                    track.enabled = false;
+                });
             }
             
-            check();
+            // Enumerate available audio devices
+            await enumerateAudioDevices();
         }
-
-        // Handle remote audio streams
+        
+        // Get list of available microphones and populate dropdown
+        async function enumerateAudioDevices() {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const audioInputs = devices.filter(d => d.kind === 'audioinput');
+            
+            const select = document.getElementById('mic-input-select');
+            select.innerHTML = '';
+            
+            audioInputs.forEach(device => {
+                const option = document.createElement('option');
+                option.value = device.deviceId;
+                option.textContent = device.label || `Microphone ${select.children.length + 1}`;
+                select.appendChild(option);
+            });
+            
+            if (selectedMicDeviceId) {
+                select.value = selectedMicDeviceId;
+            }
+        }
+        
+        // ====================================================================
+        // HANDLING REMOTE AUDIO STREAMS
+        // When we receive audio from another user, create an <audio> element
+        // ====================================================================
+        
         function handleRemoteStream(peerId, stream) {
-            // Create audio element
+            // Create audio element to play remote user's audio
             const audio = document.createElement('audio');
             audio.srcObject = stream;
             audio.autoplay = true;
             audio.id = `audio-${peerId}`;
             document.body.appendChild(audio);
             
-            // Setup visualizer for this stream
-            setupRemoteVisualizer(peerId, stream);
+            remoteAudioElements[peerId] = audio;
+            
+            // Apply volume settings
+            const userVolume = userVolumes[peerId] || 100;
+            audio.volume = (userVolume / 100) * (outputVolume / 100);
         }
-
-        // Setup audio visualizer for remote users
-        function setupRemoteVisualizer(peerId, stream) {
-            const remoteContext = new (window.AudioContext || window.webkitAudioContext)();
-            const remoteAnalyser = remoteContext.createAnalyser();
-            remoteAnalyser.fftSize = 256;
+        
+        // ====================================================================
+        // CHANNELS MANAGEMENT
+        // Creating, deleting, and switching between voice channels
+        // ====================================================================
+        
+        // Update the channels list in the UI
+        function updateChannelsList() {
+            const channelList = document.getElementById('channel-list');
+            channelList.innerHTML = '';
             
-            const source = remoteContext.createMediaStreamSource(stream);
-            source.connect(remoteAnalyser);
-            
-            // Store analyser
-            if (!connections[peerId]) {
-                connections[peerId] = {};
-            }
-            connections[peerId].analyser = remoteAnalyser;
-            
-            // Start monitoring
-            monitorRemoteAudio(peerId, remoteAnalyser);
-        }
-
-        // Monitor remote user's audio levels
-        function monitorRemoteAudio(peerId, analyser) {
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            
-            function check() {
-                if (!connections[peerId]) return; // User left
+            Object.keys(roomData.channels).forEach(channelId => {
+                const channel = roomData.channels[channelId];
+                const channelItem = document.createElement('div');
+                channelItem.className = 'channel-item' + (channelId === currentChannelId ? ' active' : '');
                 
-                analyser.getByteFrequencyData(dataArray);
+                const channelName = document.createElement('span');
+                channelName.className = 'channel-name';
+                channelName.textContent = '# ' + channel.name;
                 
-                // Calculate if they're talking
-                const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-                const isTalking = average > 10; // Simple threshold
+                channelItem.appendChild(channelName);
                 
-                // Update their visualizer
-                updateRemoteVisualizer(peerId, dataArray, isTalking);
-                
-                requestAnimationFrame(check);
-            }
-            
-            check();
-        }
-
-        // Update local audio visualizer
-        function updateLocalVisualizer(dataArray) {
-            const canvas = document.querySelector(`#user-${myPeerId} .audio-visualizer`);
-            if (!canvas) return;
-            
-            const ctx = canvas.getContext('2d');
-            const width = canvas.width;
-            const height = canvas.height;
-            
-            ctx.clearRect(0, 0, width, height);
-            ctx.fillStyle = isTalking ? '#4CAF50' : '#ccc';
-            
-            const barWidth = width / dataArray.length;
-            dataArray.forEach((value, i) => {
-                const barHeight = (value / 255) * height;
-                ctx.fillRect(i * barWidth, height - barHeight, barWidth, barHeight);
-            });
-        }
-
-        // Update remote user visualizer
-        function updateRemoteVisualizer(peerId, dataArray, isTalking) {
-            const canvas = document.querySelector(`#user-${peerId} .audio-visualizer`);
-            if (!canvas) return;
-            
-            const ctx = canvas.getContext('2d');
-            const width = canvas.width;
-            const height = canvas.height;
-            
-            ctx.clearRect(0, 0, width, height);
-            ctx.fillStyle = isTalking ? '#4CAF50' : '#ccc';
-            
-            const barWidth = width / dataArray.length;
-            dataArray.forEach((value, i) => {
-                const barHeight = (value / 255) * height;
-                ctx.fillRect(i * barWidth, height - barHeight, barWidth, barHeight);
-            });
-            
-            // Update talking indicator
-            const userCard = document.getElementById(`user-${peerId}`);
-            if (userCard) {
-                if (isTalking) {
-                    userCard.classList.add('talking');
-                } else {
-                    userCard.classList.remove('talking');
+                // Show delete button if host and not the only channel
+                if (isHost && Object.keys(roomData.channels).length > 1) {
+                    const deleteBtn = document.createElement('span');
+                    deleteBtn.className = 'channel-delete';
+                    deleteBtn.textContent = '×';
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        deleteChannel(channelId);
+                    };
+                    channelItem.appendChild(deleteBtn);
                 }
-            }
-        }
-
-        // =================================================================
-        // PUSH TO TALK CONTROLS
-        // =================================================================
-        
-        const pttButton = document.getElementById('push-to-talk-btn');
-        const pttToggle = document.getElementById('ptt-toggle');
-        
-        // Mouse controls for PTT button
-        pttButton.addEventListener('mousedown', () => {
-            if (isPushToTalkMode) {
-                setTalking(true);
-            }
-        });
-        
-        pttButton.addEventListener('mouseup', () => {
-            if (isPushToTalkMode) {
-                setTalking(false);
-            }
-        });
-        
-        // Keyboard controls (Spacebar)
-        document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && isPushToTalkMode && !e.repeat) {
-                e.preventDefault();
-                setTalking(true);
-            }
-        });
-        
-        document.addEventListener('keyup', (e) => {
-            if (e.code === 'Space' && isPushToTalkMode) {
-                e.preventDefault();
-                setTalking(false);
-            }
-        });
-        
-        // Toggle PTT mode on/off
-        pttToggle.addEventListener('click', () => {
-            isPushToTalkMode = !isPushToTalkMode;
-            pttToggle.classList.toggle('active');
-            
-            if (isPushToTalkMode) {
-                setTalking(false);
-                pttButton.textContent = 'Hold to Talk (Space)';
-                pttButton.disabled = false;
-            } else {
-                pttButton.textContent = 'Voice Activated';
-                pttButton.disabled = true;
-            }
-        });
-        
-        // Set talking state and notify others
-        function setTalking(talking) {
-            isTalking = talking;
-            
-            // Enable/disable audio tracks
-            localStream.getAudioTracks().forEach(track => {
-                track.enabled = talking;
-            });
-            
-            // Update button visual
-            if (talking) {
-                pttButton.classList.add('active');
-                pttButton.textContent = '🎤 Speaking...';
-            } else {
-                pttButton.classList.remove('active');
-                pttButton.textContent = 'Hold to Talk (Space)';
-            }
-            
-            // Update our user card
-            const ourCard = document.getElementById(`user-${myPeerId}`);
-            if (ourCard) {
-                if (talking) {
-                    ourCard.classList.add('talking');
-                } else {
-                    ourCard.classList.remove('talking');
-                }
-            }
-            
-            // Notify others via data channel
-            broadcastData({
-                type: 'talking',
-                isTalking: talking
+                
+                channelItem.onclick = () => switchChannel(channelId);
+                
+                channelList.appendChild(channelItem);
             });
         }
-
-        // Update remote user's talking status
-        function updateUserTalkingStatus(peerId, isTalking) {
-            const userCard = document.getElementById(`user-${peerId}`);
-            if (userCard) {
-                if (isTalking) {
-                    userCard.classList.add('talking');
-                } else {
-                    userCard.classList.remove('talking');
-                }
-            }
-        }
-
-        // =================================================================
-        // NOISE GATE CONTROLS
-        // =================================================================
         
-        const noiseSlider = document.getElementById('noise-slider');
-        const noiseValue = document.getElementById('noise-value');
-        
-        noiseSlider.addEventListener('input', (e) => {
-            noiseGateThreshold = parseInt(e.target.value);
-            noiseValue.textContent = `${noiseGateThreshold} dB`;
-        });
-
-        // =================================================================
-        // USER LIST MANAGEMENT
-        // =================================================================
-        
-        function addUserToList(peerId, username, isMe) {
-            const usersList = document.getElementById('users-list');
-            
-            // Check if user already exists
-            if (document.getElementById(`user-${peerId}`)) {
+        // Add new channel button (host only)
+        document.getElementById('add-channel-btn').addEventListener('click', () => {
+            if (!isHost) {
+                alert('Only the host can create channels');
                 return;
             }
             
-            const userCard = document.createElement('div');
-            userCard.className = 'user-card';
-            userCard.id = `user-${peerId}`;
+            const channelName = prompt('Enter channel name:');
+            if (channelName && channelName.trim()) {
+                const channelId = generateChannelId();
+                
+                // Create channel
+                roomData.channels[channelId] = {
+                    name: channelName.trim(),
+                    users: []
+                };
+                
+                saveRoomData();
+                updateChannelsList();
+                
+                // Notify all peers
+                broadcastData({
+                    type: 'channel-created',
+                    channelId: channelId,
+                    channelName: channelName.trim()
+                });
+            }
+        });
+        
+        // Switch to a different channel
+        function switchChannel(channelId) {
+            if (channelId === currentChannelId) return;
             
-            userCard.innerHTML = `
-                <canvas class="audio-visualizer" width="60" height="40"></canvas>
-                <div class="user-info">
-                    <div class="user-name">${username} ${isMe ? '(You)' : ''}</div>
-                    <div class="user-status">🔇 Muted</div>
-                </div>
-            `;
+            // Remove ourselves from old channel
+            const oldChannel = roomData.channels[currentChannelId];
+            if (oldChannel) {
+                oldChannel.users = oldChannel.users.filter(u => u.peerId !== myPeerId);
+            }
             
-            usersList.appendChild(userCard);
+            // Add ourselves to new channel
+            const newChannel = roomData.channels[channelId];
+            if (newChannel) {
+                newChannel.users.push({
+                    peerId: myPeerId,
+                    username: currentUsername
+                });
+            }
+            
+            saveRoomData();
+            
+            // Close all existing connections
+            Object.keys(peerConnections).forEach(peerId => {
+                if (peerConnections[peerId]) {
+                    peerConnections[peerId].close();
+                    delete peerConnections[peerId];
+                }
+            });
+            
+            Object.keys(dataConnections).forEach(peerId => {
+                if (dataConnections[peerId]) {
+                    dataConnections[peerId].close();
+                    delete dataConnections[peerId];
+                }
+            });
+            
+            Object.keys(remoteAudioElements).forEach(peerId => {
+                if (remoteAudioElements[peerId]) {
+                    remoteAudioElements[peerId].remove();
+                    delete remoteAudioElements[peerId];
+                }
+            });
+            
+            // Update current channel
+            currentChannelId = channelId;
+            currentChannelName = newChannel.name;
+            usersInChannel = {};
+            
+            // Connect to users in new channel
+            newChannel.users.forEach(user => {
+                if (user.peerId !== myPeerId) {
+                    connectToPeer(user.peerId, user.username);
+                }
+            });
+            
+            updateChannelsList();
+            updateUsersList();
+            clearChat();
+            addSystemMessage('Switched to ' + currentChannelName);
         }
-
-        function updateUserName(peerId, username) {
-            const userCard = document.getElementById(`user-${peerId}`);
-            if (userCard) {
-                const nameElement = userCard.querySelector('.user-name');
-                nameElement.textContent = username;
-            } else {
-                addUserToList(peerId, username, false);
+        
+        // Delete a channel (host only)
+        function deleteChannel(channelId) {
+            if (!isHost) {
+                alert('Only the host can delete channels');
+                return;
+            }
+            
+            if (Object.keys(roomData.channels).length <= 1) {
+                alert('Cannot delete the last channel');
+                return;
+            }
+            
+            if (confirm('Delete this channel? Users will be moved to another channel.')) {
+                // Move users to another channel
+                const otherChannelIds = Object.keys(roomData.channels).filter(id => id !== channelId);
+                const targetChannelId = otherChannelIds[0];
+                
+                const usersToMove = roomData.channels[channelId].users;
+                usersToMove.forEach(user => {
+                    roomData.channels[targetChannelId].users.push(user);
+                });
+                
+                // Delete channel
+                delete roomData.channels[channelId];
+                saveRoomData();
+                
+                // Notify all peers
+                broadcastData({
+                    type: 'channel-deleted',
+                    channelId: channelId
+                });
+                
+                updateChannelsList();
             }
         }
-
-        function removeUserFromList(peerId) {
-            const userCard = document.getElementById(`user-${peerId}`);
-            if (userCard) {
-                userCard.remove();
-            }
+        
+        // ====================================================================
+        // USERS LIST
+        // Display all users in the current voice channel
+        // ====================================================================
+        
+        function updateUsersList() {
+            const userList = document.getElementById('user-list');
+            userList.innerHTML = '';
+            
+            // Add ourselves
+            addUserToList(myPeerId, currentUsername + ' (You)', true);
+            
+            // Add other users
+            Object.keys(usersInChannel).forEach(peerId => {
+                if (peerId !== myPeerId) {
+                    addUserToList(peerId, usersInChannel[peerId], false);
+                }
+            });
         }
-
-        // =================================================================
+        
+        function addUserToList(peerId, username, isMe) {
+            const userList = document.getElementById('user-list');
+            
+            const userItem = document.createElement('div');
+            userItem.className = 'user-item';
+            userItem.dataset.peerId = peerId;
+            
+            const statusIcon = document.createElement('span');
+            statusIcon.className = 'user-status-icon';
+            statusIcon.textContent = '🔊'; // Default unmuted
+            
+            const userName = document.createElement('span');
+            userName.className = 'user-name';
+            userName.textContent = username;
+            
+            userItem.appendChild(statusIcon);
+            userItem.appendChild(userName);
+            
+            // Add context menu for other users (not ourselves)
+            if (!isMe) {
+                userItem.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    showUserContextMenu(e, peerId);
+                });
+                
+                userItem.addEventListener('click', (e) => {
+                    showUserContextMenu(e, peerId);
+                });
+            }
+            
+            userList.appendChild(userItem);
+        }
+        
+        // ====================================================================
+        // USER CONTEXT MENU
+        // Right-click menu for adjusting individual user volumes
+        // ====================================================================
+        
+        function showUserContextMenu(event, peerId) {
+            const menu = document.getElementById('user-context-menu');
+            contextMenuTargetUserId = peerId;
+            
+            // Position menu at mouse location
+            menu.style.left = event.clientX + 'px';
+            menu.style.top = event.clientY + 'px';
+            menu.classList.add('active');
+            
+            // Set current volume for this user
+            const volume = userVolumes[peerId] || 100;
+            document.getElementById('user-volume-slider').value = volume;
+            document.getElementById('user-volume-value').textContent = volume + '%';
+        }
+        
+        // Close context menu when clicking outside
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('user-context-menu');
+            if (!menu.contains(e.target) && !e.target.closest('.user-item')) {
+                menu.classList.remove('active');
+            }
+        });
+        
+        // User volume slider in context menu
+        document.getElementById('user-volume-slider').addEventListener('input', (e) => {
+            const volume = parseInt(e.target.value);
+            document.getElementById('user-volume-value').textContent = volume + '%';
+            
+            if (contextMenuTargetUserId) {
+                userVolumes[contextMenuTargetUserId] = volume;
+                
+                // Apply volume to audio element
+                if (remoteAudioElements[contextMenuTargetUserId]) {
+                    remoteAudioElements[contextMenuTargetUserId].volume = (volume / 100) * (outputVolume / 100);
+                }
+                
+                // Save settings
+                saveSettings();
+            }
+        });
+        
+        // ====================================================================
         // CHAT FUNCTIONALITY
-        // =================================================================
+        // Sending and receiving text messages with timestamp
+        // ====================================================================
         
-        const chatInput = document.getElementById('chat-input');
-        const sendChatBtn = document.getElementById('send-chat-btn');
-        
-        sendChatBtn.addEventListener('click', sendChatMessage);
-        chatInput.addEventListener('keypress', (e) => {
+        // Send message on Enter key
+        document.getElementById('chat-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 sendChatMessage();
             }
         });
         
         function sendChatMessage() {
-            const message = chatInput.value.trim();
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            
             if (!message) return;
             
-            // Add to our own chat
-            addChatMessage(userSettings.username, message);
+            const timestamp = new Date().toISOString();
             
-            // Broadcast to others
+            // Add to our own chat
+            addChatMessage(currentUsername, message, timestamp, true);
+            
+            // Broadcast to all connected peers
             broadcastData({
                 type: 'chat',
-                username: userSettings.username,
-                message: message
+                username: currentUsername,
+                message: message,
+                timestamp: timestamp
             });
             
-            chatInput.value = '';
+            input.value = '';
         }
-
-        function addChatMessage(sender, message) {
-            const chatMessages = document.getElementById('chat-messages');
+        
+        // Add a chat message to the display
+        function addChatMessage(username, message, timestamp, isOwnMessage) {
+            const messagesDiv = document.getElementById('chat-messages');
+            
             const messageDiv = document.createElement('div');
             messageDiv.className = 'chat-message';
             
-            // Process message for links and GIFs
-            const processedMessage = processMessageContent(message);
+            // Message header with username and timestamp
+            const header = document.createElement('div');
+            header.className = 'message-header';
             
-            messageDiv.innerHTML = `
-                <div class="sender">${sender}</div>
-                <div class="text">${processedMessage}</div>
-            `;
+            const usernameSpan = document.createElement('span');
+            usernameSpan.className = 'message-username';
+            usernameSpan.textContent = username;
             
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
+            const timestampSpan = document.createElement('span');
+            timestampSpan.className = 'message-timestamp';
+            timestampSpan.textContent = formatTimestamp(timestamp);
+            
+            header.appendChild(usernameSpan);
+            header.appendChild(timestampSpan);
+            
+            // Message text with link/image processing
+            const textDiv = document.createElement('div');
+            textDiv.className = 'message-text';
+            textDiv.innerHTML = processMessageContent(message);
+            
+            messageDiv.appendChild(header);
+            messageDiv.appendChild(textDiv);
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
-
-        // Process message to detect URLs and convert to links/images
+        
+        // Add system messages (user joined, channel switched, etc.)
+        function addSystemMessage(message) {
+            const messagesDiv = document.getElementById('chat-messages');
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            messageDiv.style.background = '#2f3136';
+            messageDiv.style.fontStyle = 'italic';
+            messageDiv.style.color = '#72767d';
+            messageDiv.textContent = message;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function clearChat() {
+            document.getElementById('chat-messages').innerHTML = '';
+        }
+        
+        // Format ISO timestamp to hh:mm:ss AM/PM
+        function formatTimestamp(isoString) {
+            const date = new Date(isoString);
+            let hours = date.getHours();
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const seconds = date.getSeconds().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12 || 12;
+            
+            return `${hours}:${minutes}:${seconds} ${ampm}`;
+        }
+        
+        // Process message content to detect and embed URLs and images
         function processMessageContent(message) {
-            // URL detection regex
             const urlRegex = /(https?:\/\/[^\s]+)/g;
             
             return message.replace(urlRegex, (url) => {
-                // Check if it's a GIF
-                if (url.match(/\.(gif|png|jpg|jpeg)$/i)) {
+                // Check if it's an image/GIF
+                if (url.match(/\.(gif|png|jpg|jpeg|webp)$/i)) {
                     return `<a href="${url}" target="_blank">${url}</a><br><img src="${url}" alt="Image">`;
                 } else {
                     return `<a href="${url}" target="_blank">${url}</a>`;
                 }
             });
         }
-
+        
         // Broadcast data to all connected peers
         function broadcastData(data) {
-            Object.values(connections).forEach(conn => {
-                if (conn.dataConn && conn.dataConn.open) {
-                    conn.dataConn.send(data);
+            Object.values(dataConnections).forEach(conn => {
+                if (conn.open) {
+                    conn.send(data);
                 }
             });
         }
-
-        // =================================================================
-        // LEAVING THE ROOM
-        // =================================================================
         
-        document.getElementById('leave-room-btn').addEventListener('click', leaveRoom);
+        // ====================================================================
+        // BOTTOM CONTROLS - SETTINGS, MIC, LEAVE
+        // Event handlers for the control buttons
+        // ====================================================================
         
-        function leaveRoom() {
-            // Stop friends online checking
-            stopFriendsOnlineCheck();
+        document.getElementById('settings-btn').addEventListener('click', () => {
+            document.getElementById('settings-modal').classList.add('active');
+        });
+        
+        document.getElementById('close-settings-btn').addEventListener('click', () => {
+            document.getElementById('settings-modal').classList.remove('active');
+            saveSettings();
+        });
+        
+        document.getElementById('mic-btn').addEventListener('click', () => {
+            document.getElementById('settings-modal').classList.add('active');
+        });
+        
+        document.getElementById('leave-btn').addEventListener('click', () => {
+            if (confirm('Are you sure you want to leave this room?')) {
+                leaveRoom();
+            }
+        });
+        
+        // ====================================================================
+        // SETTINGS - MICROPHONE SELECTION
+        // Change microphone device on the fly
+        // ====================================================================
+        
+        document.getElementById('mic-input-select').addEventListener('change', async (e) => {
+            selectedMicDeviceId = e.target.value;
             
-            // Close all connections
-            Object.keys(connections).forEach(peerId => {
-                if (connections[peerId].close) {
-                    connections[peerId].close();
-                }
-            });
-            
-            // Stop local stream
+            // Stop current stream
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
             }
             
-            // Close audio context
-            if (audioContext) {
-                audioContext.close();
+            try {
+                // Get new stream with selected device
+                await getMicrophoneAccess();
+                
+                // Replace tracks in all peer connections
+                Object.values(peerConnections).forEach(call => {
+                    const sender = call.peerConnection.getSenders().find(s => s.track?.kind === 'audio');
+                    if (sender) {
+                        sender.replaceTrack(localStream.getAudioTracks()[0]);
+                    }
+                });
+                
+                saveSettings();
+            } catch (error) {
+                console.error('Error changing microphone:', error);
+                alert('Could not change microphone');
+            }
+        });
+        
+        // ====================================================================
+        // SETTINGS - INPUT VOLUME
+        // Adjust microphone input volume
+        // ====================================================================
+        
+        document.getElementById('input-volume-slider').addEventListener('input', (e) => {
+            inputVolume = parseInt(e.target.value);
+            document.getElementById('input-volume-value').textContent = inputVolume + '%';
+            saveSettings();
+        });
+        
+        // ====================================================================
+        // SETTINGS - OUTPUT VOLUME
+        // Master volume for all incoming audio
+        // ====================================================================
+        
+        document.getElementById('output-volume-slider').addEventListener('input', (e) => {
+            outputVolume = parseInt(e.target.value);
+            document.getElementById('output-volume-value').textContent = outputVolume + '%';
+            
+            // Apply to all remote audio elements
+            Object.keys(remoteAudioElements).forEach(peerId => {
+                const userVolume = userVolumes[peerId] || 100;
+                remoteAudioElements[peerId].volume = (userVolume / 100) * (outputVolume / 100);
+            });
+            
+            saveSettings();
+        });
+        
+        // ====================================================================
+        // SETTINGS - NOISE SUPPRESSION
+        // Toggle noise cancellation on/off
+        // ====================================================================
+        
+        document.getElementById('noise-suppression-checkbox').addEventListener('change', async (e) => {
+            noiseSuppressionEnabled = e.target.checked;
+            
+            // Restart stream with new settings
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
             }
             
-            // Remove ourselves from room
-            if (currentRoom) {
-                const roomKey = `room_${currentRoom}`;
-                const roomData = JSON.parse(localStorage.getItem(roomKey) || '{}');
-                if (roomData.members) {
-                    roomData.members = roomData.members.filter(m => m.peerId !== myPeerId);
-                    localStorage.setItem(roomKey, JSON.stringify(roomData));
+            try {
+                await getMicrophoneAccess();
+                
+                // Replace tracks in peer connections
+                Object.values(peerConnections).forEach(call => {
+                    const sender = call.peerConnection.getSenders().find(s => s.track?.kind === 'audio');
+                    if (sender) {
+                        sender.replaceTrack(localStream.getAudioTracks()[0]);
+                    }
+                });
+                
+                saveSettings();
+            } catch (error) {
+                console.error('Error updating noise suppression:', error);
+            }
+        });
+        
+        // ====================================================================
+        // SETTINGS - PUSH TO TALK
+        // Enable PTT mode and capture key binding
+        // ====================================================================
+        
+        document.getElementById('ptt-checkbox').addEventListener('change', (e) => {
+            pushToTalkEnabled = e.target.checked;
+            
+            if (pushToTalkEnabled) {
+                // Show PTT key capture box
+                document.getElementById('ptt-key-section').style.display = 'block';
+                
+                // Mute by default when PTT is enabled
+                if (localStream) {
+                    localStream.getAudioTracks().forEach(track => {
+                        track.enabled = false;
+                    });
+                }
+            } else {
+                // Hide PTT section
+                document.getElementById('ptt-key-section').style.display = 'none';
+                
+                // Unmute when PTT is disabled
+                if (localStream) {
+                    localStream.getAudioTracks().forEach(track => {
+                        track.enabled = true;
+                    });
                 }
             }
+            
+            saveSettings();
+        });
+        
+        // PTT key capture
+        let capturingPTTKey = false;
+        
+        document.getElementById('ptt-keybox').addEventListener('click', () => {
+            if (capturingPTTKey) return;
+            
+            capturingPTTKey = true;
+            const keybox = document.getElementById('ptt-keybox');
+            keybox.textContent = 'Press any key or mouse button...';
+            keybox.style.background = '#5865f2';
+        });
+        
+        // Capture keyboard key for PTT
+        document.addEventListener('keydown', (e) => {
+            if (capturingPTTKey) {
+                e.preventDefault();
+                pushToTalkKey = { type: 'keyboard', key: e.key, code: e.code };
+                
+                const keybox = document.getElementById('ptt-keybox');
+                keybox.textContent = `PTT Key: ${e.key}`;
+                keybox.style.background = '#2f3136';
+                capturingPTTKey = false;
+                saveSettings();
+                return;
+            }
+            
+            // Handle PTT activation
+            if (pushToTalkEnabled && pushToTalkKey && pushToTalkKey.type === 'keyboard' && e.code === pushToTalkKey.code) {
+                e.preventDefault();
+                activatePushToTalk();
+            }
+        });
+        
+        // Handle PTT deactivation on key release
+        document.addEventListener('keyup', (e) => {
+            if (pushToTalkEnabled && pushToTalkKey && pushToTalkKey.type === 'keyboard' && e.code === pushToTalkKey.code) {
+                e.preventDefault();
+                deactivatePushToTalk();
+            }
+        });
+        
+        // Capture mouse button for PTT
+        document.addEventListener('mousedown', (e) => {
+            if (capturingPTTKey) {
+                e.preventDefault();
+                pushToTalkKey = { type: 'mouse', button: e.button };
+                
+                const keybox = document.getElementById('ptt-keybox');
+                keybox.textContent = `PTT Key: Mouse Button ${e.button}`;
+                keybox.style.background = '#2f3136';
+                capturingPTTKey = false;
+                saveSettings();
+                return;
+            }
+            
+            // Handle PTT activation
+            if (pushToTalkEnabled && pushToTalkKey && pushToTalkKey.type === 'mouse' && e.button === pushToTalkKey.button) {
+                e.preventDefault();
+                activatePushToTalk();
+            }
+        });
+        
+        // Handle PTT deactivation on mouse release
+        document.addEventListener('mouseup', (e) => {
+            if (pushToTalkEnabled && pushToTalkKey && pushToTalkKey.type === 'mouse' && e.button === pushToTalkKey.button) {
+                e.preventDefault();
+                deactivatePushToTalk();
+            }
+        });
+        
+        // Activate push-to-talk (unmute)
+        function activatePushToTalk() {
+            if (isPushToTalkActive) return;
+            
+            isPushToTalkActive = true;
+            
+            if (localStream) {
+                localStream.getAudioTracks().forEach(track => {
+                    track.enabled = true;
+                });
+            }
+        }
+        
+        // Deactivate push-to-talk (mute)
+        function deactivatePushToTalk() {
+            if (!isPushToTalkActive) return;
+            
+            isPushToTalkActive = false;
+            
+            if (localStream) {
+                localStream.getAudioTracks().forEach(track => {
+                    track.enabled = false;
+                });
+            }
+        }
+        
+        // ====================================================================
+        // SETTINGS PERSISTENCE
+        // Save and load settings from localStorage
+        // ====================================================================
+        
+        function saveSettings() {
+            const settings = {
+                selectedMicDeviceId,
+                inputVolume,
+                outputVolume,
+                noiseSuppressionEnabled,
+                pushToTalkEnabled,
+                pushToTalkKey,
+                userVolumes
+            };
+            
+            localStorage.setItem('voiceChatSettings', JSON.stringify(settings));
+        }
+        
+        function loadSettings() {
+            const saved = localStorage.getItem('voiceChatSettings');
+            if (!saved) return;
+            
+            const settings = JSON.parse(saved);
+            
+            selectedMicDeviceId = settings.selectedMicDeviceId || null;
+            inputVolume = settings.inputVolume || 100;
+            outputVolume = settings.outputVolume || 100;
+            noiseSuppressionEnabled = settings.noiseSuppressionEnabled || false;
+            pushToTalkEnabled = settings.pushToTalkEnabled || false;
+            pushToTalkKey = settings.pushToTalkKey || null;
+            userVolumes = settings.userVolumes || {};
+            
+            // Apply settings to UI
+            document.getElementById('input-volume-slider').value = inputVolume;
+            document.getElementById('input-volume-value').textContent = inputVolume + '%';
+            document.getElementById('output-volume-slider').value = outputVolume;
+            document.getElementById('output-volume-value').textContent = outputVolume + '%';
+            document.getElementById('noise-suppression-checkbox').checked = noiseSuppressionEnabled;
+            document.getElementById('ptt-checkbox').checked = pushToTalkEnabled;
+            
+            if (pushToTalkEnabled && pushToTalkKey) {
+                document.getElementById('ptt-key-section').style.display = 'block';
+                const keybox = document.getElementById('ptt-keybox');
+                if (pushToTalkKey.type === 'keyboard') {
+                    keybox.textContent = `PTT Key: ${pushToTalkKey.key}`;
+                } else {
+                    keybox.textContent = `PTT Key: Mouse Button ${pushToTalkKey.button}`;
+                }
+            }
+        }
+        
+        // ====================================================================
+        // ROOM DATA MANAGEMENT
+        // Save and load room data from localStorage
+        // ====================================================================
+        
+        function saveRoomData() {
+            localStorage.setItem(`room_${currentRoomId}`, JSON.stringify(roomData));
+        }
+        
+        // ====================================================================
+        // LEAVE ROOM
+        // Clean up connections and return to home screen
+        // ====================================================================
+        
+        function leaveRoom() {
+            // Notify others we're leaving
+            broadcastData({
+                type: 'user-left',
+                peerId: myPeerId,
+                username: currentUsername
+            });
+            
+            // Remove ourselves from room data
+            if (roomData.channels[currentChannelId]) {
+                roomData.channels[currentChannelId].users = 
+                    roomData.channels[currentChannelId].users.filter(u => u.peerId !== myPeerId);
+            }
+            
+            // Check if we need to transfer host
+            if (isHost) {
+                const allUsers = [];
+                Object.values(roomData.channels).forEach(channel => {
+                    allUsers.push(...channel.users);
+                });
+                
+                if (allUsers.length > 0) {
+                    // Transfer host to first user
+                    const newHost = allUsers[0];
+                    roomData.host = newHost.peerId;
+                    
+                    broadcastData({
+                        type: 'host-transfer',
+                        newHost: newHost.peerId,
+                        username: newHost.username
+                    });
+                } else {
+                    // No users left, delete room
+                    localStorage.removeItem(`room_${currentRoomId}`);
+                }
+            }
+            
+            saveRoomData();
+            
+            // Stop local stream
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            // Close all peer connections
+            Object.values(peerConnections).forEach(call => {
+                call.close();
+            });
+            peerConnections = {};
+            
+            // Close all data connections
+            Object.values(dataConnections).forEach(conn => {
+                conn.close();
+            });
+            dataConnections = {};
+            
+            // Remove remote audio elements
+            Object.values(remoteAudioElements).forEach(audio => {
+                audio.remove();
+            });
+            remoteAudioElements = {};
             
             // Destroy peer
             if (peer) {
                 peer.destroy();
+                peer = null;
             }
-            
-            // Go back to setup screen
-            document.getElementById('room-screen').style.display = 'none';
-            document.getElementById('setup-screen').style.display = 'block';
-            
-            // Clear room UI
-            document.getElementById('users-list').innerHTML = '';
-            document.getElementById('chat-messages').innerHTML = '';
             
             // Reset state
-            connections = {};
-            currentRoom = null;
-            isTalking = false;
+            currentRoomId = '';
+            currentRoomName = '';
+            currentChannelId = '';
+            currentChannelName = '';
+            isHost = false;
+            roomData = {};
+            usersInChannel = {};
+            
+            // Return to home screen
+            document.getElementById('room-screen').style.display = 'none';
+            document.getElementById('room-setup-screen').style.display = 'none';
+            document.getElementById('home-screen').style.display = 'flex';
         }
-
-        // =================================================================
+        
+        // ====================================================================
         // UTILITY FUNCTIONS
-        // =================================================================
+        // Helper functions for generating IDs and random strings
+        // ====================================================================
         
-        function updateStatusMessage(message) {
-            const statusElement = document.getElementById('status-message');
-            statusElement.textContent = message;
-        }
-
-        // =================================================================
-        // FRIENDS LIST FUNCTIONALITY
-        // =================================================================
-        
-        // Initialize friends list UI handlers
-        document.getElementById('copy-friend-id-btn').addEventListener('click', copyFriendId);
-        document.getElementById('add-friend-btn').addEventListener('click', addFriend);
-        document.getElementById('add-friend-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                addFriend();
-            }
-        });
-        
-        // Copy friend ID to clipboard
-        function copyFriendId() {
-            const friendIdInput = document.getElementById('my-friend-id');
-            if (!friendIdInput.value) {
-                alert('You need to join a room first to generate your Friend ID!');
-                return;
-            }
-            
-            friendIdInput.select();
-            friendIdInput.setSelectionRange(0, 99999); // For mobile
-            
-            navigator.clipboard.writeText(friendIdInput.value).then(() => {
-                const btn = document.getElementById('copy-friend-id-btn');
-                const originalText = btn.textContent;
-                btn.textContent = 'Copied!';
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                }, 2000);
-            }).catch(err => {
-                alert('Failed to copy: ' + err);
-            });
+        // Generate a unique 10-digit room ID
+        function generateRoomId() {
+            return Math.floor(1000000000 + Math.random() * 9000000000).toString();
         }
         
-        // Add a friend by their ID
-        function addFriend() {
-            const friendIdInput = document.getElementById('add-friend-input');
-            const friendId = friendIdInput.value.trim();
-            
-            if (!friendId) {
-                alert('Please enter a Friend ID');
-                return;
-            }
-            
-            if (friendId === myFriendId) {
-                alert('You cannot add yourself as a friend!');
-                return;
-            }
-            
-            // Check if friend already exists
-            if (friendsList.find(f => f.id === friendId)) {
-                alert('This friend is already in your list!');
-                return;
-            }
-            
-            // Add friend to list
-            const friendName = prompt('Enter a nickname for this friend (optional):') || 'Friend';
-            friendsList.push({
-                id: friendId,
-                name: friendName,
-                online: false,
-                lastSeen: null
-            });
-            
-            saveFriendsList();
-            displayFriendsList();
-            checkFriendsOnlineStatus();
-            
-            friendIdInput.value = '';
-            alert(`${friendName} added to your friends list!`);
+        // Generate a random channel ID
+        function generateChannelId() {
+            return 'channel_' + Math.random().toString(36).substring(2, 9);
         }
         
-        // Remove a friend from the list
-        function removeFriend(friendId) {
-            if (confirm('Are you sure you want to remove this friend?')) {
-                friendsList = friendsList.filter(f => f.id !== friendId);
-                saveFriendsList();
-                displayFriendsList();
-            }
-        }
-        
-        // Display the friends list in the UI
-        function displayFriendsList() {
-            const friendsListDiv = document.getElementById('friends-list');
-            const friendsSection = document.getElementById('friends-section');
-            
-            if (friendsList.length === 0) {
-                friendsSection.style.display = 'none';
-                return;
-            }
-            
-            friendsSection.style.display = 'block';
-            friendsListDiv.innerHTML = '';
-            
-            friendsList.forEach(friend => {
-                const friendItem = document.createElement('div');
-                friendItem.className = `friend-item ${friend.online ? 'online' : 'offline'}`;
-                friendItem.innerHTML = `
-                    <div class="friend-info">
-                        <div class="friend-name">${friend.name}</div>
-                        <div class="friend-status ${friend.online ? 'online' : 'offline'}">
-                            ${friend.online ? '🟢 Online' : '🔴 Offline'}
-                            ${friend.lastSeen ? ` • Last seen: ${formatLastSeen(friend.lastSeen)}` : ''}
-                        </div>
-                    </div>
-                    <div class="friend-actions">
-                        <button class="remove-friend-btn" onclick="removeFriend('${friend.id}')">Remove</button>
-                    </div>
-                `;
-                friendsListDiv.appendChild(friendItem);
-            });
-        }
-        
-        // Check which friends are currently online
-        function checkFriendsOnlineStatus() {
-            // Get all active peer IDs from localStorage presence system
-            const presenceKey = 'voiceChat_presence';
-            const presenceData = JSON.parse(localStorage.getItem(presenceKey) || '{}');
-            const now = Date.now();
-            
-            // Clean up old presence data (older than 30 seconds)
-            Object.keys(presenceData).forEach(friendId => {
-                if (now - presenceData[friendId].timestamp > 30000) {
-                    delete presenceData[friendId];
-                }
-            });
-            
-            // Update our own presence
-            if (myFriendId) {
-                presenceData[myFriendId] = {
-                    timestamp: now,
-                    username: userSettings.username,
-                    peerId: myPeerId
-                };
-            }
-            
-            localStorage.setItem(presenceKey, JSON.stringify(presenceData));
-            
-            // Check each friend's status
-            friendsList.forEach(friend => {
-                const wasOnline = friend.online;
-                friend.online = presenceData[friend.id] && (now - presenceData[friend.id].timestamp < 30000);
-                
-                if (!friend.online && wasOnline) {
-                    friend.lastSeen = now;
-                }
-            });
-            
-            saveFriendsList();
-            displayFriendsList();
-        }
-        
-        // Format last seen timestamp
-        function formatLastSeen(timestamp) {
-            const now = Date.now();
-            const diff = now - timestamp;
-            const minutes = Math.floor(diff / 60000);
-            const hours = Math.floor(minutes / 60);
-            const days = Math.floor(hours / 24);
-            
-            if (minutes < 1) return 'just now';
-            if (minutes < 60) return `${minutes}m ago`;
-            if (hours < 24) return `${hours}h ago`;
-            return `${days}d ago`;
-        }
-        
-        // Start checking friends online status periodically
-        function startFriendsOnlineCheck() {
-            // Check immediately
-            checkFriendsOnlineStatus();
-            
-            // Then check every 10 seconds
-            onlineCheckInterval = setInterval(checkFriendsOnlineStatus, 10000);
-        }
-        
-        // Stop checking friends online status
-        function stopFriendsOnlineCheck() {
-            if (onlineCheckInterval) {
-                clearInterval(onlineCheckInterval);
-                onlineCheckInterval = null;
-            }
-            
-            // Clear our presence
-            if (myFriendId) {
-                const presenceKey = 'voiceChat_presence';
-                const presenceData = JSON.parse(localStorage.getItem(presenceKey) || '{}');
-                delete presenceData[myFriendId];
-                localStorage.setItem(presenceKey, JSON.stringify(presenceData));
-            }
+        // Generate a random string for peer IDs
+        function generateRandomString() {
+            return Math.random().toString(36).substring(2, 9);
         }
     </script>
 </body>
