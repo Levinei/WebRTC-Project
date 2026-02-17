@@ -840,9 +840,12 @@
     
     <div id="room-screen">
         <div class="room-layout">
-            <!-- Top header bar showing room name -->
+            <!-- Top header bar showing room name and room ID -->
             <div class="room-header">
                 <div class="room-title" id="room-title-display">Room Name</div>
+                <div style="margin-left: auto; color: #b9bbbe; font-size: 14px;">
+                    Room ID: <span id="header-room-id" style="color: #5865f2; font-weight: bold; cursor: pointer;" title="Click to copy">0000000000</span>
+                </div>
             </div>
             
             <!-- Left sidebar - Voice channels list -->
@@ -973,11 +976,12 @@
         let currentChannelName = ''; // Current voice channel name
         let isHost = false; // Whether we're the room host
         
-        // Room data stored in localStorage (shared across all users on same browser)
-        let roomData = {}; // Structure: { channels: {}, users: [], host: peerId }
+        // Room data - now synchronized via peer-to-peer messages
+        // Structure: { roomName, host, channels: { channelId: { name, users: [] } } }
+        let roomData = {};
         
         // WebRTC connections
-        let peerConnections = {}; // Stores RTCPeerConnection objects for each peer
+        let peerConnections = {}; // Stores call objects for each peer
         let dataConnections = {}; // Stores PeerJS data connections for chat
         let remoteAudioElements = {}; // Stores <audio> elements for remote users
         
@@ -997,6 +1001,9 @@
         // Channel users tracking
         let usersInChannel = {}; // Map of peerId -> username in current channel
         
+        // Connection to room host (for non-hosts to sync room data)
+        let hostConnection = null;
+        
         // ====================================================================
         // INITIALIZATION
         // Code that runs when the page first loads
@@ -1015,8 +1022,8 @@
         
         // ====================================================================
         // HOME SCREEN - CREATE ROOM BUTTON
-        // When user clicks "Create Room", generate a 10-digit room ID and
-        // initialize PeerJS connection
+        // When user clicks "Create Room", generate a 10-digit room ID
+        // The host's peer ID IS the room ID, so others can connect directly
         // ====================================================================
         
         document.getElementById('create-room-btn').addEventListener('click', async () => {
@@ -1031,13 +1038,12 @@
             currentUsername = username;
             localStorage.setItem('username', username); // Save for next time
             
-            // Generate unique 10-digit room ID
+            // Generate unique 10-digit room ID - this will be the host's peer ID
             currentRoomId = generateRoomId();
             
-            // Initialize PeerJS connection with a custom peer ID
-            // The peer ID format is: roomId-randomString
-            const peerId = `${currentRoomId}-${generateRandomString()}`;
-            peer = new Peer(peerId, {
+            // Initialize PeerJS connection with the room ID as our peer ID
+            // This allows others to connect to us by knowing the room ID
+            peer = new Peer(currentRoomId, {
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
@@ -1049,7 +1055,7 @@
             // Wait for PeerJS connection to open
             peer.on('open', (id) => {
                 myPeerId = id;
-                console.log('My peer ID:', myPeerId);
+                console.log('My peer ID (Room ID):', myPeerId);
                 
                 // We are the host since we created the room
                 isHost = true;
@@ -1070,9 +1076,6 @@
                 currentChannelId = defaultChannelId;
                 currentChannelName = 'Voice Channel 1';
                 
-                // Save room data to localStorage
-                saveRoomData();
-                
                 // Setup PeerJS event listeners
                 setupPeerListeners();
                 
@@ -1085,7 +1088,11 @@
             // Handle PeerJS errors
             peer.on('error', (error) => {
                 console.error('Peer error:', error);
-                alert('Connection error: ' + error.type);
+                if (error.type === 'unavailable-id') {
+                    alert('This room ID is already in use. Please try creating a new room.');
+                } else {
+                    alert('Connection error: ' + error.type);
+                }
             });
         });
         
@@ -1132,29 +1139,11 @@
             currentRoomId = roomId;
             localStorage.setItem('username', username);
             
-            // Load existing room data from localStorage
-            const savedRoomData = localStorage.getItem(`room_${roomId}`);
-            if (!savedRoomData) {
-                alert('Room not found. Make sure the Room ID is correct.');
-                return;
-            }
+            // Generate our own unique peer ID (not the room ID)
+            const myUniquePeerId = `${roomId}-${generateRandomString()}`;
             
-            roomData = JSON.parse(savedRoomData);
-            currentRoomName = roomData.roomName;
-            
-            // Find the first channel to join
-            const channelIds = Object.keys(roomData.channels);
-            if (channelIds.length === 0) {
-                alert('Room has no channels');
-                return;
-            }
-            
-            currentChannelId = channelIds[0];
-            currentChannelName = roomData.channels[currentChannelId].name;
-            
-            // Initialize PeerJS with unique ID
-            const peerId = `${roomId}-${generateRandomString()}`;
-            peer = new Peer(peerId, {
+            // Initialize PeerJS with our unique ID
+            peer = new Peer(myUniquePeerId, {
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
@@ -1166,44 +1155,91 @@
             peer.on('open', async (id) => {
                 myPeerId = id;
                 console.log('My peer ID:', myPeerId);
+                console.log('Connecting to room host:', roomId);
                 
-                // Add ourselves to the channel
-                roomData.channels[currentChannelId].users.push({
-                    peerId: myPeerId,
-                    username: currentUsername
-                });
-                
-                saveRoomData();
-                
-                // Setup PeerJS listeners
+                // Setup PeerJS listeners first
                 setupPeerListeners();
                 
-                // Get microphone access
-                try {
-                    await getMicrophoneAccess();
+                // Connect to the room host (whose peer ID IS the room ID)
+                hostConnection = peer.connect(roomId);
+                
+                hostConnection.on('open', () => {
+                    console.log('Connected to room host!');
                     
-                    // Connect to all existing users in the channel
-                    const existingUsers = roomData.channels[currentChannelId].users;
-                    for (const user of existingUsers) {
-                        if (user.peerId !== myPeerId) {
-                            await connectToPeer(user.peerId, user.username);
+                    // Request room data from host
+                    hostConnection.send({
+                        type: 'request-room-data',
+                        username: currentUsername,
+                        peerId: myPeerId
+                    });
+                });
+                
+                hostConnection.on('data', async (data) => {
+                    console.log('Received from host:', data);
+                    
+                    if (data.type === 'room-data') {
+                        // Receive room information from host
+                        roomData = data.roomData;
+                        currentRoomName = roomData.roomName;
+                        
+                        // Join the first channel
+                        const channelIds = Object.keys(roomData.channels);
+                        if (channelIds.length === 0) {
+                            alert('Room has no channels');
+                            return;
+                        }
+                        
+                        currentChannelId = channelIds[0];
+                        currentChannelName = roomData.channels[currentChannelId].name;
+                        
+                        // Get microphone access
+                        try {
+                            await getMicrophoneAccess();
+                            
+                            // Add ourselves to the channel
+                            roomData.channels[currentChannelId].users.push({
+                                peerId: myPeerId,
+                                username: currentUsername
+                            });
+                            
+                            // Tell host we joined
+                            hostConnection.send({
+                                type: 'user-joined',
+                                peerId: myPeerId,
+                                username: currentUsername,
+                                channelId: currentChannelId
+                            });
+                            
+                            // Connect to all existing users in channel
+                            const existingUsers = data.usersToConnect || [];
+                            for (const user of existingUsers) {
+                                if (user.peerId !== myPeerId) {
+                                    await connectToPeer(user.peerId, user.username);
+                                }
+                            }
+                            
+                            // Go to room screen
+                            document.getElementById('join-modal').classList.remove('active');
+                            document.getElementById('home-screen').style.display = 'none';
+                            document.getElementById('room-screen').style.display = 'block';
+                            document.getElementById('room-title-display').textContent = currentRoomName;
+                            document.getElementById('header-room-id').textContent = currentRoomId;
+                            
+                            updateChannelsList();
+                            updateUsersList();
+                            addSystemMessage('Joined ' + currentChannelName);
+                            
+                        } catch (error) {
+                            console.error('Error accessing microphone:', error);
+                            alert('Could not access microphone. Please grant permission.');
                         }
                     }
-                    
-                    // Go to room screen
-                    document.getElementById('join-modal').classList.remove('active');
-                    document.getElementById('home-screen').style.display = 'none';
-                    document.getElementById('room-screen').style.display = 'block';
-                    document.getElementById('room-title-display').textContent = currentRoomName;
-                    
-                    updateChannelsList();
-                    updateUsersList();
-                    addSystemMessage('Joined ' + currentChannelName);
-                    
-                } catch (error) {
-                    console.error('Error accessing microphone:', error);
-                    alert('Could not access microphone. Please grant permission.');
-                }
+                });
+                
+                hostConnection.on('error', (error) => {
+                    console.error('Host connection error:', error);
+                    alert('Could not connect to room. The room may not exist or the host may be offline.');
+                });
             });
             
             peer.on('error', (error) => {
@@ -1225,6 +1261,16 @@
             });
         });
         
+        // Make header room ID clickable to copy
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'header-room-id') {
+                const roomId = document.getElementById('header-room-id').textContent;
+                navigator.clipboard.writeText(roomId).then(() => {
+                    alert('Room ID copied to clipboard!');
+                });
+            }
+        });
+        
         // Enter room button - validate room name and get mic access
         document.getElementById('enter-room-btn').addEventListener('click', async () => {
             const roomName = document.getElementById('room-name-input').value.trim();
@@ -1236,7 +1282,6 @@
             
             currentRoomName = roomName;
             roomData.roomName = roomName;
-            saveRoomData();
             
             // Get microphone access
             try {
@@ -1246,6 +1291,7 @@
                 document.getElementById('room-setup-screen').style.display = 'none';
                 document.getElementById('room-screen').style.display = 'block';
                 document.getElementById('room-title-display').textContent = roomName;
+                document.getElementById('header-room-id').textContent = currentRoomId;
                 
                 updateChannelsList();
                 updateUsersList();
@@ -1280,7 +1326,7 @@
                 peerConnections[call.peer] = call;
             });
             
-            // When someone sends us a data connection (for chat)
+            // When someone sends us a data connection (for chat or room sync)
             peer.on('connection', (conn) => {
                 console.log('Incoming data connection from:', conn.peer);
                 setupDataConnection(conn);
@@ -1357,6 +1403,28 @@
         
         function handleDataMessage(fromPeerId, data) {
             switch (data.type) {
+                case 'request-room-data':
+                    // A new user is requesting room data (only host receives this)
+                    if (isHost) {
+                        console.log('Sending room data to:', fromPeerId);
+                        
+                        // Get list of users in the first channel to connect to
+                        const channelIds = Object.keys(roomData.channels);
+                        const firstChannelId = channelIds[0];
+                        const usersToConnect = roomData.channels[firstChannelId].users;
+                        
+                        // Send room data back
+                        const conn = dataConnections[fromPeerId];
+                        if (conn) {
+                            conn.send({
+                                type: 'room-data',
+                                roomData: roomData,
+                                usersToConnect: usersToConnect
+                            });
+                        }
+                    }
+                    break;
+                    
                 case 'chat':
                     // Display chat message
                     addChatMessage(data.username, data.message, data.timestamp, false);
@@ -1370,7 +1438,20 @@
                     
                 case 'user-joined':
                     // Another user joined the channel
+                    console.log('User joined:', data.username, data.peerId);
                     usersInChannel[data.peerId] = data.username;
+                    
+                    // If we're the host, update room data
+                    if (isHost && data.channelId && roomData.channels[data.channelId]) {
+                        const existingUser = roomData.channels[data.channelId].users.find(u => u.peerId === data.peerId);
+                        if (!existingUser) {
+                            roomData.channels[data.channelId].users.push({
+                                peerId: data.peerId,
+                                username: data.username
+                            });
+                        }
+                    }
+                    
                     updateUsersList();
                     addSystemMessage(`${data.username} joined the channel`);
                     
@@ -1407,7 +1488,6 @@
                         name: data.channelName,
                         users: []
                     };
-                    saveRoomData();
                     updateChannelsList();
                     addSystemMessage(`Channel "${data.channelName}" created`);
                     break;
@@ -1422,7 +1502,6 @@
                         }
                     }
                     delete roomData.channels[data.channelId];
-                    saveRoomData();
                     updateChannelsList();
                     break;
                     
@@ -1430,7 +1509,6 @@
                     // Host role transferred
                     isHost = (data.newHost === myPeerId);
                     roomData.host = data.newHost;
-                    saveRoomData();
                     updateChannelsList();
                     addSystemMessage(`${data.username} is now the host`);
                     break;
@@ -1561,7 +1639,6 @@
                     users: []
                 };
                 
-                saveRoomData();
                 updateChannelsList();
                 
                 // Notify all peers
@@ -1591,8 +1668,6 @@
                     username: currentUsername
                 });
             }
-            
-            saveRoomData();
             
             // Close all existing connections
             Object.keys(peerConnections).forEach(peerId => {
@@ -1658,7 +1733,6 @@
                 
                 // Delete channel
                 delete roomData.channels[channelId];
-                saveRoomData();
                 
                 // Notify all peers
                 broadcastData({
@@ -2232,13 +2306,9 @@
                         newHost: newHost.peerId,
                         username: newHost.username
                     });
-                } else {
-                    // No users left, delete room
-                    localStorage.removeItem(`room_${currentRoomId}`);
                 }
+                // If no users left, room will naturally cease to exist
             }
-            
-            saveRoomData();
             
             // Stop local stream
             if (localStream) {
@@ -2257,6 +2327,12 @@
                 conn.close();
             });
             dataConnections = {};
+            
+            // Close host connection if we have one
+            if (hostConnection) {
+                hostConnection.close();
+                hostConnection = null;
+            }
             
             // Remove remote audio elements
             Object.values(remoteAudioElements).forEach(audio => {
