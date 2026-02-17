@@ -308,6 +308,63 @@
             background: #dc3545;
         }
 
+        /* Friends list styling */
+        .friend-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: white;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            border-left: 3px solid #ddd;
+        }
+
+        .friend-item.online {
+            border-left-color: #28a745;
+        }
+
+        .friend-item.offline {
+            border-left-color: #dc3545;
+        }
+
+        .friend-info {
+            flex: 1;
+        }
+
+        .friend-name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .friend-status {
+            font-size: 11px;
+            color: #666;
+        }
+
+        .friend-status.online {
+            color: #28a745;
+        }
+
+        .friend-status.offline {
+            color: #dc3545;
+        }
+
+        .friend-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .friend-actions button {
+            width: auto;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
+        .remove-friend-btn {
+            background: #dc3545 !important;
+        }
+
         /* Status messages */
         .status-message {
             text-align: center;
@@ -344,17 +401,36 @@
             <input type="text" id="username" placeholder="Enter your name" />
         </div>
 
+        <!-- Friend ID Section -->
+        <div class="input-group" style="background: #f0f8ff; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <label style="margin-bottom: 10px;">Your Friend ID</label>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <input type="text" id="my-friend-id" readonly style="flex: 1; background: #e8f4f8; cursor: pointer;" placeholder="Will generate after first join" />
+                <button type="button" id="copy-friend-id-btn" style="width: auto; padding: 10px 20px; font-size: 14px;">Copy</button>
+            </div>
+            <small style="color: #666; margin-top: 5px; display: block;">Share this ID with friends so they can add you!</small>
+        </div>
+
+        <div class="input-group">
+            <label for="add-friend-input">Add Friend by ID</label>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="add-friend-input" placeholder="Paste friend's ID here" style="flex: 1;" />
+                <button type="button" id="add-friend-btn" style="width: auto; padding: 10px 20px;">Add</button>
+            </div>
+        </div>
+
+        <!-- Friends List -->
+        <div class="input-group" id="friends-section" style="display: none;">
+            <label>Friends</label>
+            <div id="friends-list" style="background: #f8f9fa; padding: 10px; border-radius: 8px; max-height: 150px; overflow-y: auto;">
+                <!-- Friends will be added here -->
+            </div>
+        </div>
+
         <div class="input-group">
             <label for="audio-input">Microphone</label>
             <select id="audio-input">
                 <option value="">Loading devices...</option>
-            </select>
-        </div>
-
-        <div class="input-group">
-            <label for="video-input">Webcam (Optional - for future video)</label>
-            <select id="video-input">
-                <option value="">No camera / Loading...</option>
             </select>
         </div>
 
@@ -425,6 +501,7 @@
         
         let peer; // Our PeerJS connection object
         let myPeerId; // Our unique ID assigned by PeerJS
+        let myFriendId; // Our permanent friend ID (derived from peer ID or stored)
         let currentRoom; // The room name we're in
         let connections = {}; // Object to store all peer connections
         let localStream; // Our microphone stream
@@ -434,6 +511,8 @@
         let isPushToTalkMode = true; // Whether PTT is enabled
         let isTalking = false; // Whether we're currently transmitting
         let userSettings = {}; // Stores username, devices, etc.
+        let friendsList = []; // Array of friend objects {id, name, peerId, online}
+        let onlineCheckInterval; // Interval for checking friend online status
 
         // =================================================================
         // INITIALIZATION: Load saved settings and setup devices
@@ -451,7 +530,20 @@
             if (saved) {
                 userSettings = JSON.parse(saved);
                 document.getElementById('username').value = userSettings.username || '';
+                myFriendId = userSettings.friendId || null;
                 // Device IDs will be set after enumerating devices
+            }
+            
+            // Load friends list
+            const savedFriends = localStorage.getItem('voiceChatFriends');
+            if (savedFriends) {
+                friendsList = JSON.parse(savedFriends);
+                displayFriendsList();
+            }
+            
+            // Display friend ID if we have one
+            if (myFriendId) {
+                document.getElementById('my-friend-id').value = myFriendId;
             }
         }
 
@@ -460,48 +552,45 @@
             userSettings = {
                 username: document.getElementById('username').value,
                 audioDeviceId: document.getElementById('audio-input').value,
-                videoDeviceId: document.getElementById('video-input').value
+                friendId: myFriendId
             };
             localStorage.setItem('voiceChatSettings', JSON.stringify(userSettings));
         }
+        
+        // Save friends list to localStorage
+        function saveFriendsList() {
+            localStorage.setItem('voiceChatFriends', JSON.stringify(friendsList));
+        }
 
-        // Get list of available microphones and cameras
+        // Get list of available microphones
         async function enumerateDevices() {
             try {
                 // Request permission first
-                await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                await navigator.mediaDevices.getUserMedia({ audio: true });
                 
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 const audioSelect = document.getElementById('audio-input');
-                const videoSelect = document.getElementById('video-input');
                 
                 // Clear existing options
                 audioSelect.innerHTML = '';
-                videoSelect.innerHTML = '<option value="">No camera</option>';
                 
-                // Populate dropdowns with available devices
+                // Populate dropdown with available audio devices
                 devices.forEach(device => {
-                    const option = document.createElement('option');
-                    option.value = device.deviceId;
-                    option.text = device.label || `${device.kind} ${audioSelect.length}`;
-                    
                     if (device.kind === 'audioinput') {
+                        const option = document.createElement('option');
+                        option.value = device.deviceId;
+                        option.text = device.label || `Microphone ${audioSelect.length + 1}`;
                         audioSelect.appendChild(option);
-                    } else if (device.kind === 'videoinput') {
-                        videoSelect.appendChild(option);
                     }
                 });
                 
-                // Restore saved device selections
+                // Restore saved device selection
                 if (userSettings.audioDeviceId) {
                     audioSelect.value = userSettings.audioDeviceId;
                 }
-                if (userSettings.videoDeviceId) {
-                    videoSelect.value = userSettings.videoDeviceId;
-                }
             } catch (error) {
                 console.error('Error enumerating devices:', error);
-                alert('Could not access media devices. Please grant permission.');
+                alert('Could not access microphone. Please grant permission.');
             }
         }
 
@@ -530,6 +619,12 @@
                 return;
             }
             
+            // Generate Friend ID if we don't have one
+            if (!myFriendId) {
+                myFriendId = generateFriendId();
+                document.getElementById('my-friend-id').value = myFriendId;
+            }
+            
             // Save settings
             saveUserSettings();
             currentRoom = roomName;
@@ -546,6 +641,9 @@
                 // Initialize PeerJS connection
                 initializePeer(username, roomName);
                 
+                // Start friends online status checking
+                startFriendsOnlineCheck();
+                
                 // Switch to room screen
                 document.getElementById('setup-screen').style.display = 'none';
                 document.getElementById('room-screen').style.display = 'block';
@@ -558,6 +656,14 @@
                 console.error('Error accessing microphone:', error);
                 alert('Could not access microphone. Please check permissions.');
             }
+        }
+        
+        // Generate a unique Friend ID
+        function generateFriendId() {
+            // Create a unique ID based on timestamp and random string
+            const timestamp = Date.now().toString(36);
+            const randomStr = Math.random().toString(36).substring(2, 9);
+            return `${timestamp}-${randomStr}`;
         }
 
         // =================================================================
@@ -1087,6 +1193,9 @@
         document.getElementById('leave-room-btn').addEventListener('click', leaveRoom);
         
         function leaveRoom() {
+            // Stop friends online checking
+            stopFriendsOnlineCheck();
+            
             // Close all connections
             Object.keys(connections).forEach(peerId => {
                 if (connections[peerId].close) {
@@ -1140,6 +1249,199 @@
         function updateStatusMessage(message) {
             const statusElement = document.getElementById('status-message');
             statusElement.textContent = message;
+        }
+
+        // =================================================================
+        // FRIENDS LIST FUNCTIONALITY
+        // =================================================================
+        
+        // Initialize friends list UI handlers
+        document.getElementById('copy-friend-id-btn').addEventListener('click', copyFriendId);
+        document.getElementById('add-friend-btn').addEventListener('click', addFriend);
+        document.getElementById('add-friend-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                addFriend();
+            }
+        });
+        
+        // Copy friend ID to clipboard
+        function copyFriendId() {
+            const friendIdInput = document.getElementById('my-friend-id');
+            if (!friendIdInput.value) {
+                alert('You need to join a room first to generate your Friend ID!');
+                return;
+            }
+            
+            friendIdInput.select();
+            friendIdInput.setSelectionRange(0, 99999); // For mobile
+            
+            navigator.clipboard.writeText(friendIdInput.value).then(() => {
+                const btn = document.getElementById('copy-friend-id-btn');
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                alert('Failed to copy: ' + err);
+            });
+        }
+        
+        // Add a friend by their ID
+        function addFriend() {
+            const friendIdInput = document.getElementById('add-friend-input');
+            const friendId = friendIdInput.value.trim();
+            
+            if (!friendId) {
+                alert('Please enter a Friend ID');
+                return;
+            }
+            
+            if (friendId === myFriendId) {
+                alert('You cannot add yourself as a friend!');
+                return;
+            }
+            
+            // Check if friend already exists
+            if (friendsList.find(f => f.id === friendId)) {
+                alert('This friend is already in your list!');
+                return;
+            }
+            
+            // Add friend to list
+            const friendName = prompt('Enter a nickname for this friend (optional):') || 'Friend';
+            friendsList.push({
+                id: friendId,
+                name: friendName,
+                online: false,
+                lastSeen: null
+            });
+            
+            saveFriendsList();
+            displayFriendsList();
+            checkFriendsOnlineStatus();
+            
+            friendIdInput.value = '';
+            alert(`${friendName} added to your friends list!`);
+        }
+        
+        // Remove a friend from the list
+        function removeFriend(friendId) {
+            if (confirm('Are you sure you want to remove this friend?')) {
+                friendsList = friendsList.filter(f => f.id !== friendId);
+                saveFriendsList();
+                displayFriendsList();
+            }
+        }
+        
+        // Display the friends list in the UI
+        function displayFriendsList() {
+            const friendsListDiv = document.getElementById('friends-list');
+            const friendsSection = document.getElementById('friends-section');
+            
+            if (friendsList.length === 0) {
+                friendsSection.style.display = 'none';
+                return;
+            }
+            
+            friendsSection.style.display = 'block';
+            friendsListDiv.innerHTML = '';
+            
+            friendsList.forEach(friend => {
+                const friendItem = document.createElement('div');
+                friendItem.className = `friend-item ${friend.online ? 'online' : 'offline'}`;
+                friendItem.innerHTML = `
+                    <div class="friend-info">
+                        <div class="friend-name">${friend.name}</div>
+                        <div class="friend-status ${friend.online ? 'online' : 'offline'}">
+                            ${friend.online ? '🟢 Online' : '🔴 Offline'}
+                            ${friend.lastSeen ? ` • Last seen: ${formatLastSeen(friend.lastSeen)}` : ''}
+                        </div>
+                    </div>
+                    <div class="friend-actions">
+                        <button class="remove-friend-btn" onclick="removeFriend('${friend.id}')">Remove</button>
+                    </div>
+                `;
+                friendsListDiv.appendChild(friendItem);
+            });
+        }
+        
+        // Check which friends are currently online
+        function checkFriendsOnlineStatus() {
+            // Get all active peer IDs from localStorage presence system
+            const presenceKey = 'voiceChat_presence';
+            const presenceData = JSON.parse(localStorage.getItem(presenceKey) || '{}');
+            const now = Date.now();
+            
+            // Clean up old presence data (older than 30 seconds)
+            Object.keys(presenceData).forEach(friendId => {
+                if (now - presenceData[friendId].timestamp > 30000) {
+                    delete presenceData[friendId];
+                }
+            });
+            
+            // Update our own presence
+            if (myFriendId) {
+                presenceData[myFriendId] = {
+                    timestamp: now,
+                    username: userSettings.username,
+                    peerId: myPeerId
+                };
+            }
+            
+            localStorage.setItem(presenceKey, JSON.stringify(presenceData));
+            
+            // Check each friend's status
+            friendsList.forEach(friend => {
+                const wasOnline = friend.online;
+                friend.online = presenceData[friend.id] && (now - presenceData[friend.id].timestamp < 30000);
+                
+                if (!friend.online && wasOnline) {
+                    friend.lastSeen = now;
+                }
+            });
+            
+            saveFriendsList();
+            displayFriendsList();
+        }
+        
+        // Format last seen timestamp
+        function formatLastSeen(timestamp) {
+            const now = Date.now();
+            const diff = now - timestamp;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+            
+            if (minutes < 1) return 'just now';
+            if (minutes < 60) return `${minutes}m ago`;
+            if (hours < 24) return `${hours}h ago`;
+            return `${days}d ago`;
+        }
+        
+        // Start checking friends online status periodically
+        function startFriendsOnlineCheck() {
+            // Check immediately
+            checkFriendsOnlineStatus();
+            
+            // Then check every 10 seconds
+            onlineCheckInterval = setInterval(checkFriendsOnlineStatus, 10000);
+        }
+        
+        // Stop checking friends online status
+        function stopFriendsOnlineCheck() {
+            if (onlineCheckInterval) {
+                clearInterval(onlineCheckInterval);
+                onlineCheckInterval = null;
+            }
+            
+            // Clear our presence
+            if (myFriendId) {
+                const presenceKey = 'voiceChat_presence';
+                const presenceData = JSON.parse(localStorage.getItem(presenceKey) || '{}');
+                delete presenceData[myFriendId];
+                localStorage.setItem(presenceKey, JSON.stringify(presenceData));
+            }
         }
     </script>
 </body>
