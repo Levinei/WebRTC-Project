@@ -246,13 +246,18 @@
             background: #2c2f33;
         }
 
-        /* 3-column grid layout: channels | chat | users */
+        /* 3-column grid layout: channels | chat | users 
+           Fixed header at top and fixed controls at bottom */
         .room-layout {
             display: grid;
             grid-template-columns: 200px 1fr 250px;
             grid-template-rows: 50px 1fr 70px;
             height: 100vh;
             gap: 0;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            left: 0;
         }
 
         /* ================================================================
@@ -283,6 +288,7 @@
             background: #2f3136;
             border-right: 1px solid #202225;
             overflow-y: auto;
+            padding-bottom: 70px; /* Space for fixed controls bar */
         }
 
         .channels-header {
@@ -379,11 +385,12 @@
             background: #36393f;
         }
 
-        /* Scrollable area for chat messages */
+        /* Scrollable area for chat messages - always shows scrollbar */
         .chat-messages {
             flex: 1;
-            overflow-y: auto;
+            overflow-y: scroll; /* Changed from auto to scroll to always show scrollbar */
             padding: 20px;
+            padding-bottom: 90px; /* Extra padding to prevent overlap with controls bar */
         }
 
         /* Individual chat message bubble */
@@ -435,11 +442,12 @@
             display: block;
         }
 
-        /* Input area at bottom of chat */
+        /* Input area at bottom of chat - positioned above fixed controls */
         .chat-input-area {
             padding: 15px 20px;
             background: #40444b;
             border-top: 1px solid #2f3136;
+            margin-bottom: 70px; /* Space for fixed controls bar */
         }
 
         .chat-input {
@@ -466,6 +474,7 @@
             background: #2f3136;
             border-left: 1px solid #202225;
             overflow-y: auto;
+            padding-bottom: 70px; /* Space for fixed controls bar */
         }
 
         .users-header {
@@ -580,7 +589,7 @@
 
         /* ================================================================
            BOTTOM CONTROLS BAR
-           Contains Leave, Settings, and Mic buttons
+           Fixed at bottom of screen - always visible
            ================================================================ */
         .controls-bar {
             grid-column: 1 / -1;
@@ -590,6 +599,12 @@
             align-items: center;
             justify-content: space-between;
             padding: 0 20px;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            z-index: 100;
         }
 
         .controls-left, .controls-right {
@@ -876,11 +891,10 @@
                 </div>
             </div>
             
-            <!-- Bottom control bar with Settings, Mic, and Leave buttons -->
+            <!-- Bottom control bar with Settings and Leave buttons -->
             <div class="controls-bar">
                 <div class="controls-left">
                     <button class="control-btn btn-settings" id="settings-btn">Settings</button>
-                    <button class="control-btn btn-mic" id="mic-btn">Mic</button>
                 </div>
                 <div class="controls-right">
                     <button class="control-btn btn-leave" id="leave-btn">Leave</button>
@@ -1977,10 +1991,6 @@
         document.getElementById('close-settings-btn').addEventListener('click', () => {
             document.getElementById('settings-modal').classList.remove('active');
             saveSettings();
-        });
-        
-        document.getElementById('mic-btn').addEventListener('click', () => {
-            document.getElementById('settings-modal').classList.add('active');
         });
         
         document.getElementById('leave-btn').addEventListener('click', () => {
