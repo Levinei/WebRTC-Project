@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Voice Chat</title>
+    <!-- PeerJS Library - Handles WebRTC signaling for us -->
+    <script src="https://unpkg.com/peerjs@1.5.1/dist/peerjs.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* Main container for the setup screen */
+        #setup-screen {
+            max-width: 500px;
+            margin: 50px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        /* Main container for the room screen */
+        #room-screen {
+            display: none;
+            max-width: 1200px;
+            margin: 20px auto;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        h1, h2 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        /* Form input styling */
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 600;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* Button styling */
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Room layout - split between users and chat */
+        .room-container {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        /* Users panel */
+        .users-panel {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        /* Individual user card */
+        .user-card {
+            background: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+
+        .user-card.talking {
+            border: 3px solid #4CAF50;
+            transform: scale(1.02);
+        }
+
+        /* Audio visualizer canvas */
+        .audio-visualizer {
+            width: 60px;
+            height: 40px;
+            background: #f0f0f0;
+            border-radius: 5px;
+        }
+
+        .user-info {
+            flex: 1;
+        }
+
+        .user-name {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .user-status {
+            font-size: 12px;
+            color: #888;
+        }
+
+        /* Chat panel */
+        .chat-panel {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            max-height: 600px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            min-height: 400px;
+        }
+
+        /* Individual chat message */
+        .chat-message {
+            margin-bottom: 12px;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 8px;
+            word-wrap: break-word;
+        }
+
+        .chat-message .sender {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 4px;
+        }
+
+        .chat-message .text {
+            color: #333;
+        }
+
+        /* Links and images in chat */
+        .chat-message a {
+            color: #667eea;
+            text-decoration: underline;
+        }
+
+        .chat-message img {
+            max-width: 200px;
+            border-radius: 5px;
+            margin-top: 5px;
+        }
+
+        /* Chat input area */
+        .chat-input-area {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+        }
+
+        .chat-input-area button {
+            width: auto;
+            padding: 12px 20px;
+        }
+
+        /* Controls panel */
+        .controls-panel {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        /* Push to talk button - special styling */
+        #push-to-talk-btn {
+            width: auto;
+            padding: 15px 30px;
+            background: #dc3545;
+            font-size: 18px;
+        }
+
+        #push-to-talk-btn.active {
+            background: #28a745;
+        }
+
+        /* Noise suppression slider */
+        .noise-control {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .noise-control input[type="range"] {
+            width: 100%;
+        }
+
+        .noise-level {
+            text-align: center;
+            margin-top: 5px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        /* PTT toggle switch */
+        .ptt-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 24px;
+            background: #ccc;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .toggle-switch.active {
+            background: #667eea;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+
+        .toggle-switch.active .toggle-slider {
+            transform: translateX(26px);
+        }
+
+        /* Leave room button */
+        #leave-room-btn {
+            width: auto;
+            padding: 12px 20px;
+            background: #dc3545;
+        }
+
+        /* Status messages */
+        .status-message {
+            text-align: center;
+            padding: 10px;
+            background: #d1ecf1;
+            border-radius: 8px;
+            color: #0c5460;
+            margin-bottom: 15px;
+        }
+
+        /* Responsive design for mobile */
+        @media (max-width: 768px) {
+            .room-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls-panel {
+                flex-direction: column;
+            }
+            
+            #push-to-talk-btn {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- SETUP SCREEN: Where users enter their info and join a room -->
+    <div id="setup-screen">
+        <h1>🎙️ Voice Chat</h1>
+        
+        <div class="input-group">
+            <label for="username">Your Name</label>
+            <input type="text" id="username" placeholder="Enter your name" />
+        </div>
+
+        <div class="input-group">
+            <label for="audio-input">Microphone</label>
+            <select id="audio-input">
+                <option value="">Loading devices...</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <label for="video-input">Webcam (Optional - for future video)</label>
+            <select id="video-input">
+                <option value="">No camera / Loading...</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <label for="room-name">Room Name</label>
+            <input type="text" id="room-name" placeholder="Enter room name to join" />
+        </div>
+
+        <button id="join-btn">Join Room</button>
+    </div>
+
+    <!-- ROOM SCREEN: The actual voice chat interface -->
+    <div id="room-screen">
+        <h2>Room: <span id="current-room-name"></span></h2>
+        
+        <div class="status-message" id="status-message">
+            Connecting to room...
+        </div>
+
+        <!-- Controls: Push to talk, noise suppression, leave -->
+        <div class="controls-panel">
+            <button id="push-to-talk-btn">Hold to Talk (Space)</button>
+            
+            <div class="ptt-toggle">
+                <label>Push-to-Talk Mode:</label>
+                <div class="toggle-switch active" id="ptt-toggle">
+                    <div class="toggle-slider"></div>
+                </div>
+            </div>
+
+            <div class="noise-control">
+                <label>Noise Gate Threshold: <span id="noise-value">-50 dB</span></label>
+                <input type="range" id="noise-slider" min="-100" max="-20" value="-50" />
+                <div class="noise-level">Lower = More sensitive | Higher = Less sensitive</div>
+            </div>
+
+            <button id="leave-room-btn">Leave Room</button>
+        </div>
+
+        <!-- Main room layout -->
+        <div class="room-container">
+            <!-- Left side: Users and their audio visualizers -->
+            <div class="users-panel">
+                <h3>Participants</h3>
+                <div id="users-list">
+                    <!-- User cards will be added here dynamically -->
+                </div>
+            </div>
+
+            <!-- Right side: Chat -->
+            <div class="chat-panel">
+                <h3>Chat</h3>
+                <div class="chat-messages" id="chat-messages">
+                    <!-- Chat messages appear here -->
+                </div>
+                <div class="chat-input-area">
+                    <input type="text" id="chat-input" placeholder="Type a message..." />
+                    <button id="send-chat-btn">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =================================================================
+        // GLOBAL VARIABLES AND STATE
+        // =================================================================
+        
+        let peer; // Our PeerJS connection object
+        let myPeerId; // Our unique ID assigned by PeerJS
+        let currentRoom; // The room name we're in
+        let connections = {}; // Object to store all peer connections
+        let localStream; // Our microphone stream
+        let audioContext; // Web Audio API context for audio processing
+        let analyser; // Audio analyser for visualizations
+        let noiseGateThreshold = -50; // dB threshold for noise gate
+        let isPushToTalkMode = true; // Whether PTT is enabled
+        let isTalking = false; // Whether we're currently transmitting
+        let userSettings = {}; // Stores username, devices, etc.
+
+        // =================================================================
+        // INITIALIZATION: Load saved settings and setup devices
+        // =================================================================
+        
+        // Load saved settings from localStorage when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            loadUserSettings();
+            enumerateDevices();
+        });
+
+        // Load user settings from browser storage
+        function loadUserSettings() {
+            const saved = localStorage.getItem('voiceChatSettings');
+            if (saved) {
+                userSettings = JSON.parse(saved);
+                document.getElementById('username').value = userSettings.username || '';
+                // Device IDs will be set after enumerating devices
+            }
+        }
+
+        // Save user settings to browser storage
+        function saveUserSettings() {
+            userSettings = {
+                username: document.getElementById('username').value,
+                audioDeviceId: document.getElementById('audio-input').value,
+                videoDeviceId: document.getElementById('video-input').value
+            };
+            localStorage.setItem('voiceChatSettings', JSON.stringify(userSettings));
+        }
+
+        // Get list of available microphones and cameras
+        async function enumerateDevices() {
+            try {
+                // Request permission first
+                await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const audioSelect = document.getElementById('audio-input');
+                const videoSelect = document.getElementById('video-input');
+                
+                // Clear existing options
+                audioSelect.innerHTML = '';
+                videoSelect.innerHTML = '<option value="">No camera</option>';
+                
+                // Populate dropdowns with available devices
+                devices.forEach(device => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `${device.kind} ${audioSelect.length}`;
+                    
+                    if (device.kind === 'audioinput') {
+                        audioSelect.appendChild(option);
+                    } else if (device.kind === 'videoinput') {
+                        videoSelect.appendChild(option);
+                    }
+                });
+                
+                // Restore saved device selections
+                if (userSettings.audioDeviceId) {
+                    audioSelect.value = userSettings.audioDeviceId;
+                }
+                if (userSettings.videoDeviceId) {
+                    videoSelect.value = userSettings.videoDeviceId;
+                }
+            } catch (error) {
+                console.error('Error enumerating devices:', error);
+                alert('Could not access media devices. Please grant permission.');
+            }
+        }
+
+        // =================================================================
+        // JOINING A ROOM
+        // =================================================================
+        
+        document.getElementById('join-btn').addEventListener('click', joinRoom);
+
+        async function joinRoom() {
+            const username = document.getElementById('username').value.trim();
+            const roomName = document.getElementById('room-name').value.trim();
+            const audioDeviceId = document.getElementById('audio-input').value;
+            
+            // Validate inputs
+            if (!username) {
+                alert('Please enter your name');
+                return;
+            }
+            if (!roomName) {
+                alert('Please enter a room name');
+                return;
+            }
+            if (!audioDeviceId) {
+                alert('Please select a microphone');
+                return;
+            }
+            
+            // Save settings
+            saveUserSettings();
+            currentRoom = roomName;
+            
+            // Get microphone stream
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: { deviceId: audioDeviceId }
+                });
+                
+                // Setup audio processing
+                setupAudioProcessing();
+                
+                // Initialize PeerJS connection
+                initializePeer(username, roomName);
+                
+                // Switch to room screen
+                document.getElementById('setup-screen').style.display = 'none';
+                document.getElementById('room-screen').style.display = 'block';
+                document.getElementById('current-room-name').textContent = roomName;
+                
+                // Add ourselves to the user list
+                addUserToList(myPeerId, username, true);
+                
+            } catch (error) {
+                console.error('Error accessing microphone:', error);
+                alert('Could not access microphone. Please check permissions.');
+            }
+        }
+
+        // =================================================================
+        // PEERJS INITIALIZATION AND CONNECTION
+        // =================================================================
+        
+        function initializePeer(username, roomName) {
+            // Create a new PeerJS instance
+            // This connects to PeerJS's free signaling server
+            peer = new Peer({
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' }, // Google's STUN server
+                        { urls: 'stun:global.stun.twilio.com:3478' } // Twilio's STUN server
+                    ]
+                }
+            });
+            
+            // When we successfully connect and get an ID
+            peer.on('open', (id) => {
+                myPeerId = id;
+                console.log('My peer ID:', myPeerId);
+                
+                // Announce ourselves to the room
+                // In a real app, you'd have a room server managing this
+                // For now, we'll use a simple localStorage-based room system
+                announceToRoom(roomName, username);
+                
+                updateStatusMessage('Connected! Waiting for others to join...');
+            });
+            
+            // When someone calls us
+            peer.on('call', (call) => {
+                console.log('Incoming call from:', call.peer);
+                
+                // Answer the call with our audio stream
+                call.answer(localStream);
+                
+                // When we receive their audio stream
+                call.on('stream', (remoteStream) => {
+                    console.log('Received stream from:', call.peer);
+                    handleRemoteStream(call.peer, remoteStream);
+                });
+                
+                // Store the call connection
+                connections[call.peer] = call;
+            });
+            
+            // When someone sends us a data connection
+            peer.on('connection', (conn) => {
+                setupDataConnection(conn);
+            });
+            
+            // Error handling
+            peer.on('error', (error) => {
+                console.error('Peer error:', error);
+                updateStatusMessage('Connection error: ' + error.type);
+            });
+        }
+
+        // Announce ourselves to others in the room
+        function announceToRoom(roomName, username) {
+            // Get current room members from localStorage
+            const roomKey = `room_${roomName}`;
+            const roomData = JSON.parse(localStorage.getItem(roomKey) || '{}');
+            const roomMembers = roomData.members || [];
+            
+            // Connect to each existing member
+            roomMembers.forEach(member => {
+                if (member.peerId !== myPeerId) {
+                    connectToPeer(member.peerId, member.username);
+                }
+            });
+            
+            // Add ourselves to the room
+            roomMembers.push({ peerId: myPeerId, username: username });
+            roomData.members = roomMembers;
+            localStorage.setItem(roomKey, JSON.stringify(roomData));
+            
+            // Clean up when window closes
+            window.addEventListener('beforeunload', () => {
+                leaveRoom();
+            });
+        }
+
+        // Connect to a specific peer
+        function connectToPeer(peerId, username) {
+            console.log('Connecting to peer:', peerId);
+            
+            // Setup data connection for chat
+            const dataConn = peer.connect(peerId);
+            setupDataConnection(dataConn);
+            
+            // Setup audio connection
+            const call = peer.call(peerId, localStream);
+            
+            call.on('stream', (remoteStream) => {
+                console.log('Received stream from:', peerId);
+                handleRemoteStream(peerId, remoteStream);
+            });
+            
+            // Store connection
+            connections[peerId] = call;
+            
+            // Add user to list
+            addUserToList(peerId, username, false);
+        }
+
+        // =================================================================
+        // DATA CONNECTION FOR CHAT
+        // =================================================================
+        
+        function setupDataConnection(conn) {
+            conn.on('open', () => {
+                console.log('Data connection opened with:', conn.peer);
+                
+                // Send our username
+                conn.send({
+                    type: 'username',
+                    username: userSettings.username
+                });
+            });
+            
+            conn.on('data', (data) => {
+                handleDataMessage(conn.peer, data);
+            });
+            
+            // Store data connection
+            if (!connections[conn.peer]) {
+                connections[conn.peer] = {};
+            }
+            connections[conn.peer].dataConn = conn;
+        }
+
+        // Handle incoming data messages
+        function handleDataMessage(peerId, data) {
+            if (data.type === 'chat') {
+                addChatMessage(data.username, data.message);
+            } else if (data.type === 'username') {
+                updateUserName(peerId, data.username);
+            } else if (data.type === 'talking') {
+                updateUserTalkingStatus(peerId, data.isTalking);
+            }
+        }
+
+        // =================================================================
+        // AUDIO PROCESSING AND VISUALIZATION
+        // =================================================================
+        
+        function setupAudioProcessing() {
+            // Create Web Audio API context
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Create analyser for visualizations
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            
+            // Connect our microphone to analyser
+            const source = audioContext.createMediaStreamSource(localStream);
+            source.connect(analyser);
+            
+            // Start audio level monitoring
+            monitorAudioLevels();
+        }
+
+        // Monitor our own audio levels for noise gate
+        function monitorAudioLevels() {
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            function check() {
+                analyser.getByteFrequencyData(dataArray);
+                
+                // Calculate average volume
+                const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+                const dB = 20 * Math.log10(average / 255);
+                
+                // Check if we should be transmitting based on noise gate
+                if (!isPushToTalkMode) {
+                    const shouldTalk = dB > noiseGateThreshold;
+                    if (shouldTalk !== isTalking) {
+                        setTalking(shouldTalk);
+                    }
+                }
+                
+                // Update our visualizer
+                updateLocalVisualizer(dataArray);
+                
+                requestAnimationFrame(check);
+            }
+            
+            check();
+        }
+
+        // Handle remote audio streams
+        function handleRemoteStream(peerId, stream) {
+            // Create audio element
+            const audio = document.createElement('audio');
+            audio.srcObject = stream;
+            audio.autoplay = true;
+            audio.id = `audio-${peerId}`;
+            document.body.appendChild(audio);
+            
+            // Setup visualizer for this stream
+            setupRemoteVisualizer(peerId, stream);
+        }
+
+        // Setup audio visualizer for remote users
+        function setupRemoteVisualizer(peerId, stream) {
+            const remoteContext = new (window.AudioContext || window.webkitAudioContext)();
+            const remoteAnalyser = remoteContext.createAnalyser();
+            remoteAnalyser.fftSize = 256;
+            
+            const source = remoteContext.createMediaStreamSource(stream);
+            source.connect(remoteAnalyser);
+            
+            // Store analyser
+            if (!connections[peerId]) {
+                connections[peerId] = {};
+            }
+            connections[peerId].analyser = remoteAnalyser;
+            
+            // Start monitoring
+            monitorRemoteAudio(peerId, remoteAnalyser);
+        }
+
+        // Monitor remote user's audio levels
+        function monitorRemoteAudio(peerId, analyser) {
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            function check() {
+                if (!connections[peerId]) return; // User left
+                
+                analyser.getByteFrequencyData(dataArray);
+                
+                // Calculate if they're talking
+                const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+                const isTalking = average > 10; // Simple threshold
+                
+                // Update their visualizer
+                updateRemoteVisualizer(peerId, dataArray, isTalking);
+                
+                requestAnimationFrame(check);
+            }
+            
+            check();
+        }
+
+        // Update local audio visualizer
+        function updateLocalVisualizer(dataArray) {
+            const canvas = document.querySelector(`#user-${myPeerId} .audio-visualizer`);
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = isTalking ? '#4CAF50' : '#ccc';
+            
+            const barWidth = width / dataArray.length;
+            dataArray.forEach((value, i) => {
+                const barHeight = (value / 255) * height;
+                ctx.fillRect(i * barWidth, height - barHeight, barWidth, barHeight);
+            });
+        }
+
+        // Update remote user visualizer
+        function updateRemoteVisualizer(peerId, dataArray, isTalking) {
+            const canvas = document.querySelector(`#user-${peerId} .audio-visualizer`);
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = isTalking ? '#4CAF50' : '#ccc';
+            
+            const barWidth = width / dataArray.length;
+            dataArray.forEach((value, i) => {
+                const barHeight = (value / 255) * height;
+                ctx.fillRect(i * barWidth, height - barHeight, barWidth, barHeight);
+            });
+            
+            // Update talking indicator
+            const userCard = document.getElementById(`user-${peerId}`);
+            if (userCard) {
+                if (isTalking) {
+                    userCard.classList.add('talking');
+                } else {
+                    userCard.classList.remove('talking');
+                }
+            }
+        }
+
+        // =================================================================
+        // PUSH TO TALK CONTROLS
+        // =================================================================
+        
+        const pttButton = document.getElementById('push-to-talk-btn');
+        const pttToggle = document.getElementById('ptt-toggle');
+        
+        // Mouse controls for PTT button
+        pttButton.addEventListener('mousedown', () => {
+            if (isPushToTalkMode) {
+                setTalking(true);
+            }
+        });
+        
+        pttButton.addEventListener('mouseup', () => {
+            if (isPushToTalkMode) {
+                setTalking(false);
+            }
+        });
+        
+        // Keyboard controls (Spacebar)
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && isPushToTalkMode && !e.repeat) {
+                e.preventDefault();
+                setTalking(true);
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'Space' && isPushToTalkMode) {
+                e.preventDefault();
+                setTalking(false);
+            }
+        });
+        
+        // Toggle PTT mode on/off
+        pttToggle.addEventListener('click', () => {
+            isPushToTalkMode = !isPushToTalkMode;
+            pttToggle.classList.toggle('active');
+            
+            if (isPushToTalkMode) {
+                setTalking(false);
+                pttButton.textContent = 'Hold to Talk (Space)';
+                pttButton.disabled = false;
+            } else {
+                pttButton.textContent = 'Voice Activated';
+                pttButton.disabled = true;
+            }
+        });
+        
+        // Set talking state and notify others
+        function setTalking(talking) {
+            isTalking = talking;
+            
+            // Enable/disable audio tracks
+            localStream.getAudioTracks().forEach(track => {
+                track.enabled = talking;
+            });
+            
+            // Update button visual
+            if (talking) {
+                pttButton.classList.add('active');
+                pttButton.textContent = '🎤 Speaking...';
+            } else {
+                pttButton.classList.remove('active');
+                pttButton.textContent = 'Hold to Talk (Space)';
+            }
+            
+            // Update our user card
+            const ourCard = document.getElementById(`user-${myPeerId}`);
+            if (ourCard) {
+                if (talking) {
+                    ourCard.classList.add('talking');
+                } else {
+                    ourCard.classList.remove('talking');
+                }
+            }
+            
+            // Notify others via data channel
+            broadcastData({
+                type: 'talking',
+                isTalking: talking
+            });
+        }
+
+        // Update remote user's talking status
+        function updateUserTalkingStatus(peerId, isTalking) {
+            const userCard = document.getElementById(`user-${peerId}`);
+            if (userCard) {
+                if (isTalking) {
+                    userCard.classList.add('talking');
+                } else {
+                    userCard.classList.remove('talking');
+                }
+            }
+        }
+
+        // =================================================================
+        // NOISE GATE CONTROLS
+        // =================================================================
+        
+        const noiseSlider = document.getElementById('noise-slider');
+        const noiseValue = document.getElementById('noise-value');
+        
+        noiseSlider.addEventListener('input', (e) => {
+            noiseGateThreshold = parseInt(e.target.value);
+            noiseValue.textContent = `${noiseGateThreshold} dB`;
+        });
+
+        // =================================================================
+        // USER LIST MANAGEMENT
+        // =================================================================
+        
+        function addUserToList(peerId, username, isMe) {
+            const usersList = document.getElementById('users-list');
+            
+            // Check if user already exists
+            if (document.getElementById(`user-${peerId}`)) {
+                return;
+            }
+            
+            const userCard = document.createElement('div');
+            userCard.className = 'user-card';
+            userCard.id = `user-${peerId}`;
+            
+            userCard.innerHTML = `
+                <canvas class="audio-visualizer" width="60" height="40"></canvas>
+                <div class="user-info">
+                    <div class="user-name">${username} ${isMe ? '(You)' : ''}</div>
+                    <div class="user-status">🔇 Muted</div>
+                </div>
+            `;
+            
+            usersList.appendChild(userCard);
+        }
+
+        function updateUserName(peerId, username) {
+            const userCard = document.getElementById(`user-${peerId}`);
+            if (userCard) {
+                const nameElement = userCard.querySelector('.user-name');
+                nameElement.textContent = username;
+            } else {
+                addUserToList(peerId, username, false);
+            }
+        }
+
+        function removeUserFromList(peerId) {
+            const userCard = document.getElementById(`user-${peerId}`);
+            if (userCard) {
+                userCard.remove();
+            }
+        }
+
+        // =================================================================
+        // CHAT FUNCTIONALITY
+        // =================================================================
+        
+        const chatInput = document.getElementById('chat-input');
+        const sendChatBtn = document.getElementById('send-chat-btn');
+        
+        sendChatBtn.addEventListener('click', sendChatMessage);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendChatMessage();
+            }
+        });
+        
+        function sendChatMessage() {
+            const message = chatInput.value.trim();
+            if (!message) return;
+            
+            // Add to our own chat
+            addChatMessage(userSettings.username, message);
+            
+            // Broadcast to others
+            broadcastData({
+                type: 'chat',
+                username: userSettings.username,
+                message: message
+            });
+            
+            chatInput.value = '';
+        }
+
+        function addChatMessage(sender, message) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            
+            // Process message for links and GIFs
+            const processedMessage = processMessageContent(message);
+            
+            messageDiv.innerHTML = `
+                <div class="sender">${sender}</div>
+                <div class="text">${processedMessage}</div>
+            `;
+            
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Process message to detect URLs and convert to links/images
+        function processMessageContent(message) {
+            // URL detection regex
+            const urlRegex = /(https?:\/\/[^\s]+)/g;
+            
+            return message.replace(urlRegex, (url) => {
+                // Check if it's a GIF
+                if (url.match(/\.(gif|png|jpg|jpeg)$/i)) {
+                    return `<a href="${url}" target="_blank">${url}</a><br><img src="${url}" alt="Image">`;
+                } else {
+                    return `<a href="${url}" target="_blank">${url}</a>`;
+                }
+            });
+        }
+
+        // Broadcast data to all connected peers
+        function broadcastData(data) {
+            Object.values(connections).forEach(conn => {
+                if (conn.dataConn && conn.dataConn.open) {
+                    conn.dataConn.send(data);
+                }
+            });
+        }
+
+        // =================================================================
+        // LEAVING THE ROOM
+        // =================================================================
+        
+        document.getElementById('leave-room-btn').addEventListener('click', leaveRoom);
+        
+        function leaveRoom() {
+            // Close all connections
+            Object.keys(connections).forEach(peerId => {
+                if (connections[peerId].close) {
+                    connections[peerId].close();
+                }
+            });
+            
+            // Stop local stream
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            
+            // Close audio context
+            if (audioContext) {
+                audioContext.close();
+            }
+            
+            // Remove ourselves from room
+            if (currentRoom) {
+                const roomKey = `room_${currentRoom}`;
+                const roomData = JSON.parse(localStorage.getItem(roomKey) || '{}');
+                if (roomData.members) {
+                    roomData.members = roomData.members.filter(m => m.peerId !== myPeerId);
+                    localStorage.setItem(roomKey, JSON.stringify(roomData));
+                }
+            }
+            
+            // Destroy peer
+            if (peer) {
+                peer.destroy();
+            }
+            
+            // Go back to setup screen
+            document.getElementById('room-screen').style.display = 'none';
+            document.getElementById('setup-screen').style.display = 'block';
+            
+            // Clear room UI
+            document.getElementById('users-list').innerHTML = '';
+            document.getElementById('chat-messages').innerHTML = '';
+            
+            // Reset state
+            connections = {};
+            currentRoom = null;
+            isTalking = false;
+        }
+
+        // =================================================================
+        // UTILITY FUNCTIONS
+        // =================================================================
+        
+        function updateStatusMessage(message) {
+            const statusElement = document.getElementById('status-message');
+            statusElement.textContent = message;
+        }
+    </script>
+</body>
+</html>
